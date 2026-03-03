@@ -1,6 +1,6 @@
 # spring-batch-example
 
-Helm-chart som skapar en suspendad `CronJob`-mall för Spring Batch.
+Helm-chart som skapar en suspendad `Job`-mall för Spring Batch.
 
 ## Installera
 
@@ -8,9 +8,15 @@ Helm-chart som skapar en suspendad `CronJob`-mall för Spring Batch.
 helm install sb-example ./spring-batch-example -n batch
 ```
 
-Detta skapar en CronJob med namn:
+Detta skapar en Job-mall med namn:
 
 - `sb-example-spring-batch-example-template`
+
+Starta mallen direkt utan API:
+
+```bash
+kubectl patch job sb-example-spring-batch-example-template -n batch --type merge -p '{"spec":{"suspend":false}}'
+```
 
 ## Använd med trigger-API från k8s-jobs-example
 

@@ -7,7 +7,7 @@ metadata:
     {{- include "k8s-jobs-example.commonLabels" . | nindent 4 }}
 rules:
   - apiGroups: ["batch"]
-    resources: ["jobs", "cronjobs"]
+    resources: ["jobs"]
     verbs: ["get", "list", "watch", "create"]
   - apiGroups: [""]
     resources: ["pods", "pods/log"]

@@ -1,6 +1,6 @@
 # script-example
 
-Helm-chart som skapar en suspendad `CronJob`-mall för skriptkörning.
+Helm-chart som skapar en suspendad `Job`-mall för skriptkörning.
 
 ## Installera
 
@@ -8,9 +8,15 @@ Helm-chart som skapar en suspendad `CronJob`-mall för skriptkörning.
 helm install script-example ./script-example -n batch
 ```
 
-Detta skapar en CronJob med namn:
+Detta skapar en Job-mall med namn:
 
 - `script-example-script-example-template`
+
+Starta mallen direkt utan API:
+
+```bash
+kubectl patch job script-example-script-example-template -n batch --type merge -p '{"spec":{"suspend":false}}'
+```
 
 ## Använd med trigger-API från k8s-jobs-example
 

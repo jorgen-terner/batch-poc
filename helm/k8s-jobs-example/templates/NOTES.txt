@@ -1,12 +1,12 @@
 Chartet installerades.
 
-Externa starter (skapar ett nytt Job från CronJob-mallen):
+Externa starter:
 
-  Script-jobb:
-  kubectl create job --from=cronjob/{{ include "k8s-jobs-example.fullname" . }}-{{ .Values.scriptJob.cronTemplateName }} script-run-$(date +%s)
+  Starta script-mallen (resume):
+  kubectl patch job {{ include "k8s-jobs-example.fullname" . }}-{{ .Values.scriptJob.cronTemplateName }} --type merge -p '{"spec":{"suspend":false}}'
 
-  Spring Batch-jobb:
-  kubectl create job --from=cronjob/{{ include "k8s-jobs-example.fullname" . }}-{{ .Values.springBatchJob.cronTemplateName }} spring-run-$(date +%s)
+  Starta Spring Batch-mallen (resume):
+  kubectl patch job {{ include "k8s-jobs-example.fullname" . }}-{{ .Values.springBatchJob.cronTemplateName }} --type merge -p '{"spec":{"suspend":false}}'
 
 Statusrapportering:
 

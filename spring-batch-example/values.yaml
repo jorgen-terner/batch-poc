@@ -3,10 +3,9 @@ fullnameOverride: ""
 
 cronJob:
   nameSuffix: template
-  schedule: "0 0 31 2 *"
-  suspend: true
 
 job:
+  suspend: true
   backoffLimit: 0
   ttlSecondsAfterFinished: 3600
 

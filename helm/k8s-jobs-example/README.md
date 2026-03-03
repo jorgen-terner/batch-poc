@@ -12,12 +12,12 @@ Målet med exemplet:
 Chartet skapar:
 - `ServiceAccount` för jobbkörning.
 - `Role` + `RoleBinding` med rättigheter att skapa/läsa `Job` och läsa pod-loggar.
-- Två `CronJob`-resurser i läget `suspend: true` som används som mallar:
+- Två `Job`-resurser i läget `suspend: true` som används som mallar:
   - Script-mall
   - Spring Batch-mall
 - Ett internt HTTP-API (Deployment + Service) för att trigga jobb och läsa jobbstatus.
 
-När en extern klient vill starta ett jobb skapas ett nytt `Job` från vald CronJob-mall.
+När en extern klient vill starta ett jobb skapas ett nytt `Job` från vald Job-mall.
 
 ## HTTP API för extern trigger/status
 
@@ -68,13 +68,13 @@ helm install batch-demo ./helm/k8s-jobs-example -n batch --create-namespace
 ### Script-jobb
 
 ```bash
-kubectl create job --from=cronjob/batch-demo-k8s-jobs-example-script-template script-run-$(date +%s) -n batch
+kubectl patch job batch-demo-k8s-jobs-example-script-template -n batch --type merge -p '{"spec":{"suspend":false}}'
 ```
 
 ### Spring Batch-jobb
 
 ```bash
-kubectl create job --from=cronjob/batch-demo-k8s-jobs-example-spring-template spring-run-$(date +%s) -n batch
+kubectl patch job batch-demo-k8s-jobs-example-spring-template -n batch --type merge -p '{"spec":{"suspend":false}}'
 ```
 
 ## Statusrapportering

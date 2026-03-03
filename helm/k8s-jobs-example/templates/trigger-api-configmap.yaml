@@ -104,36 +104,39 @@ data:
         }
 
         if (req.method === 'POST' && url.pathname.startsWith('/trigger/')) {
-          const cronJobName = decodeURIComponent(url.pathname.replace('/trigger/', ''));
-          if (!cronJobName) {
-            json(res, 400, { error: 'Missing cronJobName in path' });
+          const templateJobName = decodeURIComponent(url.pathname.replace('/trigger/', ''));
+          if (!templateJobName) {
+            json(res, 400, { error: 'Missing templateJobName in path' });
             return;
           }
 
           const body = await readJsonBody(req);
-          const cronJobPath = `/apis/batch/v1/namespaces/${namespace}/cronjobs/${encodeURIComponent(cronJobName)}`;
-          const cronJob = await k8sRequest(cronJobPath, 'GET');
+          const templateJobPath = `/apis/batch/v1/namespaces/${namespace}/jobs/${encodeURIComponent(templateJobName)}`;
+          const templateJob = await k8sRequest(templateJobPath, 'GET');
 
-          const generatedName = body.jobName || `${cronJobName}-manual-${Date.now()}-${randomSuffix()}`;
+          const generatedName = body.jobName || `${templateJobName}-manual-${Date.now()}-${randomSuffix()}`;
           const job = {
             apiVersion: 'batch/v1',
             kind: 'Job',
             metadata: {
               name: generatedName,
               labels: {
-                ...(cronJob.metadata?.labels || {}),
+                ...(templateJob.metadata?.labels || {}),
                 'batch.example/triggered-by': 'http-api',
-                'batch.example/template': cronJobName
+                'batch.example/template': templateJobName
               }
             },
-            spec: cronJob.spec.jobTemplate.spec
+            spec: {
+              ...(templateJob.spec || {}),
+              suspend: false
+            }
           };
 
           const created = await k8sRequest(`/apis/batch/v1/namespaces/${namespace}/jobs`, 'POST', job);
           json(res, 201, {
             message: 'Job created',
             namespace,
-            template: cronJobName,
+            template: templateJobName,
             jobName: created.metadata?.name
           });
           return;

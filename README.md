@@ -7,12 +7,12 @@ Detta repo visar ett komplett exempel för externt triggbara Kubernetes Jobs med
 - helm/k8s-jobs-example
   - Baschart med:
     - RBAC och ServiceAccount
-    - suspendade CronJob-mallar
+    - suspendade Job-mallar
     - trigger-API (HTTP) för att starta Job och läsa status
 - spring-batch-example
-  - Exempelchart som skapar en Spring Batch CronJob-mall
+  - Exempelchart som skapar en Spring Batch Job-mall
 - script-example
-  - Exempelchart som skapar en script CronJob-mall
+  - Exempelchart som skapar en script Job-mall
 
 ## End-to-end flöde
 
@@ -73,19 +73,19 @@ curl http://localhost:8080/jobs/<job-namn>
 
 ## Alternativ: starta med kubectl direkt
 
-Du kan även skapa Job från CronJob-mall utan API:
+Du kan även starta Job-mallen utan API:
 
 ```bash
-kubectl create job --from=cronjob/sb-example-spring-batch-example-template sb-run-$(date +%s) -n batch
-kubectl create job --from=cronjob/script-example-script-example-template script-run-$(date +%s) -n batch
+kubectl patch job sb-example-spring-batch-example-template -n batch --type merge -p '{"spec":{"suspend":false}}'
+kubectl patch job script-example-script-example-template -n batch --type merge -p '{"spec":{"suspend":false}}'
 ```
 
 ## Snabb felsökning
 
-- Kontrollera att CronJob-mallar finns:
+- Kontrollera att Job-mallar finns:
 
 ```bash
-kubectl get cronjobs -n batch
+kubectl get jobs -n batch
 ```
 
 - Kontrollera skapade jobb:
