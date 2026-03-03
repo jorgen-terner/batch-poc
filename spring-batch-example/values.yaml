@@ -1,0 +1,30 @@
+nameOverride: ""
+fullnameOverride: ""
+
+cronJob:
+  nameSuffix: template
+  schedule: "0 0 31 2 *"
+  suspend: true
+
+job:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+
+image:
+  repository: ghcr.io/example/spring-batch-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+command:
+  - java
+  - -jar
+  - app.jar
+  - --spring.batch.job.name=exampleJob
+
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    value: k8s
+  - name: JOB_KIND
+    value: spring-batch
+
+serviceAccountName: default

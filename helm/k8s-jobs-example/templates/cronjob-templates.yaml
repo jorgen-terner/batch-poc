@@ -1,0 +1,65 @@
+{{- if .Values.scriptJob.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "k8s-jobs-example.fullname" . }}-{{ .Values.scriptJob.cronTemplateName }}
+  labels:
+    {{- include "k8s-jobs-example.commonLabels" . | nindent 4 }}
+    batch.example/type: script
+spec:
+  schedule: {{ .Values.scriptJob.schedule | quote }}
+  suspend: true
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.jobs.backoffLimit }}
+      ttlSecondsAfterFinished: {{ .Values.jobs.ttlSecondsAfterFinished }}
+      template:
+        metadata:
+          labels:
+            {{- include "k8s-jobs-example.commonLabels" . | nindent 12 }}
+            batch.example/type: script
+        spec:
+          serviceAccountName: {{ include "k8s-jobs-example.serviceAccountName" . }}
+          restartPolicy: Never
+          containers:
+            - name: script-job
+              image: {{ .Values.scriptJob.image | quote }}
+              imagePullPolicy: IfNotPresent
+              command:
+                {{- toYaml .Values.scriptJob.command | nindent 16 }}
+              env:
+                {{- toYaml .Values.scriptJob.env | nindent 16 }}
+{{- end }}
+{{- if .Values.springBatchJob.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "k8s-jobs-example.fullname" . }}-{{ .Values.springBatchJob.cronTemplateName }}
+  labels:
+    {{- include "k8s-jobs-example.commonLabels" . | nindent 4 }}
+    batch.example/type: spring-batch
+spec:
+  schedule: {{ .Values.springBatchJob.schedule | quote }}
+  suspend: true
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.jobs.backoffLimit }}
+      ttlSecondsAfterFinished: {{ .Values.jobs.ttlSecondsAfterFinished }}
+      template:
+        metadata:
+          labels:
+            {{- include "k8s-jobs-example.commonLabels" . | nindent 12 }}
+            batch.example/type: spring-batch
+        spec:
+          serviceAccountName: {{ include "k8s-jobs-example.serviceAccountName" . }}
+          restartPolicy: Never
+          containers:
+            - name: spring-batch-job
+              image: {{ .Values.springBatchJob.image | quote }}
+              imagePullPolicy: IfNotPresent
+              command:
+                {{- toYaml .Values.springBatchJob.command | nindent 16 }}
+              env:
+                {{- toYaml .Values.springBatchJob.env | nindent 16 }}
+{{- end }}

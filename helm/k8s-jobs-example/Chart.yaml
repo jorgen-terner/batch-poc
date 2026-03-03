@@ -1,0 +1,6 @@
+apiVersion: v2
+name: k8s-jobs-example
+description: Helm chart som skapar resurser för externt triggbara Kubernetes Jobs
+version: 0.1.0
+appVersion: "1.0.0"
+type: application

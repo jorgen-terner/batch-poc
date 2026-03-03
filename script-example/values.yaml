@@ -1,0 +1,30 @@
+nameOverride: ""
+fullnameOverride: ""
+
+cronJob:
+  nameSuffix: template
+  schedule: "0 0 31 2 *"
+  suspend: true
+
+job:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+
+image:
+  repository: bash
+  tag: "5.2"
+  pullPolicy: IfNotPresent
+
+command:
+  - /bin/sh
+  - -c
+  - |
+    echo "Start script-jobb";
+    date;
+    echo "Klart";
+
+env:
+  - name: JOB_KIND
+    value: script
+
+serviceAccountName: default

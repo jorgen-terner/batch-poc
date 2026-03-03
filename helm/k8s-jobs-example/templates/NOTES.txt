@@ -1,0 +1,34 @@
+Chartet installerades.
+
+Externa starter (skapar ett nytt Job från CronJob-mallen):
+
+  Script-jobb:
+  kubectl create job --from=cronjob/{{ include "k8s-jobs-example.fullname" . }}-{{ .Values.scriptJob.cronTemplateName }} script-run-$(date +%s)
+
+  Spring Batch-jobb:
+  kubectl create job --from=cronjob/{{ include "k8s-jobs-example.fullname" . }}-{{ .Values.springBatchJob.cronTemplateName }} spring-run-$(date +%s)
+
+Statusrapportering:
+
+  Alla jobb:
+  kubectl get jobs -l app.kubernetes.io/instance={{ .Release.Name }}
+
+  Ett specifikt jobb (statusfält):
+  kubectl get job <job-namn> -o jsonpath='{.status}'
+
+  Pod-loggar kopplade till ett jobb:
+  kubectl logs job/<job-namn>
+
+HTTP trigger-API (inuti klustret):
+
+  Service:
+  {{ include "k8s-jobs-example.fullname" . }}-trigger-api:{{ .Values.triggerApi.service.port }}
+
+  Trigger script-mall:
+  curl -X POST http://{{ include "k8s-jobs-example.fullname" . }}-trigger-api:{{ .Values.triggerApi.service.port }}/trigger/{{ include "k8s-jobs-example.fullname" . }}-{{ .Values.scriptJob.cronTemplateName }}
+
+  Trigger Spring Batch-mall:
+  curl -X POST http://{{ include "k8s-jobs-example.fullname" . }}-trigger-api:{{ .Values.triggerApi.service.port }}/trigger/{{ include "k8s-jobs-example.fullname" . }}-{{ .Values.springBatchJob.cronTemplateName }}
+
+  Läs status:
+  curl http://{{ include "k8s-jobs-example.fullname" . }}-trigger-api:{{ .Values.triggerApi.service.port }}/jobs/<job-namn>
