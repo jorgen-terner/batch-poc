@@ -10,22 +10,22 @@ COPY src ./src
 RUN mvn clean package -DskipTests
 
 # Runtime stage
-FROM eclipse-temurin:17-jre-alpine
+FROM registry.access.redhat.com/ubi8/openjdk-17-runtime:1.18
 
 WORKDIR /app
 
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser
+ENV LANGUAGE='en_US:en'
 
-COPY --from=builder /app/target/trigger-job-api-*.jar app.jar
-
-RUN chown -R appuser:appuser /app
-
-USER appuser
+# Quarkus fast-jar runtime
+COPY --from=builder --chown=185 /app/target/quarkus-app/lib/ /deployments/lib/
+COPY --from=builder --chown=185 /app/target/quarkus-app/*.jar /deployments/
+COPY --from=builder --chown=185 /app/target/quarkus-app/app/ /deployments/app/
+COPY --from=builder --chown=185 /app/target/quarkus-app/quarkus/ /deployments/quarkus/
 
 EXPOSE 8080
+USER 185
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+ENV JAVA_OPTS="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
+ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT [ "java", "-jar", "/deployments/quarkus-run.jar" ]

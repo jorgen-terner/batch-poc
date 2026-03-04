@@ -5,29 +5,28 @@ import com.example.triggerjobapi.dto.JobStartResponse;
 import com.example.triggerjobapi.dto.JobStatusResponse;
 import com.example.triggerjobapi.exception.JobException;
 import com.example.triggerjobapi.service.KubernetesJobService;
+import jakarta.inject.Inject;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 
 import java.util.List;
 import java.util.Map;
 
-@RestController
-@RequestMapping("/api/jobs")
+@Path("/api/jobs")
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
 public class JobController {
 
-    private final KubernetesJobService jobService;
-
-    public JobController(KubernetesJobService jobService) {
-        this.jobService = jobService;
-    }
+    @Inject
+    KubernetesJobService jobService;
 
     /**
      * Starta ett nytt Job
      */
-    @PostMapping
-    public ResponseEntity<JobStartResponse> startJob(@Valid @RequestBody JobStartRequest request) {
+    @POST
+    public Response startJob(@Valid JobStartRequest request) {
         try {
             String jobId = jobService.startJob(request);
             JobStartResponse response = JobStartResponse.builder()
@@ -36,50 +35,55 @@ public class JobController {
                 .message("Job startad framgångsrikt")
                 .success(true)
                 .build();
-            return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            return Response.status(Response.Status.CREATED).entity(response).build();
         } catch (JobException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(JobStartResponse.builder()
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity(JobStartResponse.builder()
                     .message(e.getMessage())
                     .success(false)
-                    .build());
+                    .build())
+                .build();
         }
     }
 
     /**
      * Hämta status för ett Job
      */
-    @GetMapping("/{jobId}")
-    public ResponseEntity<?> getJobStatus(@PathVariable String jobId) {
+    @GET
+    @Path("/{jobId}")
+    public Response getJobStatus(@PathParam("jobId") String jobId) {
         try {
             JobStatusResponse response = jobService.getJobStatus(jobId);
-            return ResponseEntity.ok(response);
+            return Response.ok(response).build();
         } catch (JobException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(Map.of("error", e.getMessage()));
+            return Response.status(Response.Status.NOT_FOUND)
+                .entity(Map.of("error", e.getMessage()))
+                .build();
         }
     }
 
     /**
      * Lista alla Jobs
      */
-    @GetMapping
-    public ResponseEntity<List<JobStatusResponse>> listJobs() {
+    @GET
+    public Response listJobs() {
         List<JobStatusResponse> jobs = jobService.listJobs();
-        return ResponseEntity.ok(jobs);
+        return Response.ok(jobs).build();
     }
 
     /**
      * Ta bort/stoppa ett Job
      */
-    @DeleteMapping("/{jobId}")
-    public ResponseEntity<?> deleteJob(@PathVariable String jobId) {
+    @DELETE
+    @Path("/{jobId}")
+    public Response deleteJob(@PathParam("jobId") String jobId) {
         try {
             jobService.deleteJob(jobId);
-            return ResponseEntity.ok(Map.of("message", "Job raderat framgångsrikt"));
+            return Response.ok(Map.of("message", "Job raderat framgångsrikt")).build();
         } catch (JobException e) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(Map.of("error", e.getMessage()));
+            return Response.status(Response.Status.NOT_FOUND)
+                .entity(Map.of("error", e.getMessage()))
+                .build();
         }
     }
 }

@@ -7,30 +7,29 @@ import io.kubernetes.client.openapi.ApiException;
 import io.kubernetes.client.openapi.apis.BatchV1Api;
 import io.kubernetes.client.openapi.apis.CoreV1Api;
 import io.kubernetes.client.openapi.models.*;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.LocalDateTime;
 import java.util.*;
 
-@Service
+@ApplicationScoped
 public class KubernetesJobService {
 
-    @Value("${kubernetes.namespace:default}")
-    private String namespace;
+    @ConfigProperty(name = "kubernetes.namespace", defaultValue = "default")
+    String namespace;
 
-    @Value("${kubernetes.job-ttl-seconds:86400}")
-    private int defaultTtlSeconds;
+    @ConfigProperty(name = "kubernetes.job-ttl-seconds", defaultValue = "86400")
+    int defaultTtlSeconds;
 
-    private final BatchV1Api batchV1Api;
-    private final CoreV1Api coreV1Api;
+    @Inject
+    BatchV1Api batchV1Api;
 
-    public KubernetesJobService(BatchV1Api batchV1Api, CoreV1Api coreV1Api) {
-        this.batchV1Api = batchV1Api;
-        this.coreV1Api = coreV1Api;
-    }
+    @Inject
+    CoreV1Api coreV1Api;
 
     /**
      * Starta ett nytt Kubernetes Job
@@ -119,7 +118,7 @@ public class KubernetesJobService {
      */
     public JobStatusResponse getJobStatus(String jobId) {
         try {
-            V1Job job = batchV1Api.readNamespacedJob(jobId, namespace, null, null, null);
+            V1Job job = batchV1Api.readNamespacedJob(jobId, namespace, null);
             return mapJobToResponse(job);
         } catch (ApiException e) {
             if (e.getCode() == 404) {
@@ -135,7 +134,7 @@ public class KubernetesJobService {
     public List<JobStatusResponse> listJobs() {
         try {
             V1JobList jobList = batchV1Api.listNamespacedJob(namespace, null, null, null, null, 
-                null, null, null, null, null, null);
+                null, null, null, null, false, null, false);
             
             List<JobStatusResponse> response = new ArrayList<>();
             if (jobList.getItems() != null) {
@@ -153,7 +152,7 @@ public class KubernetesJobService {
     public void deleteJob(String jobId) {
         try {
             batchV1Api.deleteNamespacedJob(jobId, namespace, null, null, null, null, 
-                "Foreground", null);
+                null, null);
         } catch (ApiException e) {
             if (e.getCode() == 404) {
                 throw new JobException("Job hittades inte: " + jobId);
