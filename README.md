@@ -41,7 +41,7 @@ Kubernetes Job Manager - En komplett REST API för att externalt managing Kubern
 ### Förutsättningar
 - Kubernetes cluster (Minikube, Docker Desktop, eller cloud)
 - Helm 3+
-- Maven 3.8+ (för att bygga lokalt)
+- Gradle 8.11+ (wrapper included in project)
 
 ### Snabb start
 

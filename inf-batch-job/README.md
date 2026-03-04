@@ -87,13 +87,16 @@ DELETE /api/jobs/{jobId}
 
 ### Förutsättningar
 - Java 17+
-- Maven 3.8+
+- Java 17+
+- Gradle 8.11+ (wrapper included)
 - Docker (för containerisering)
 
 ### Lokal byggning
 ```bash
 cd inf-batch-job
-mvn clean package
+.\gradlew.bat build
+# eller på Linux/Mac:
+./gradlew build
 ```
 
 ### Docker-image
@@ -107,13 +110,13 @@ För lokal utveckling med Minikube/Docker Desktop Kubernetes:
 
 ```bash
 # Bygg applikationen
-mvn clean package
+.\gradlew.bat build
 
 # Kör Quarkus i dev-läge (med hot reload)
-mvn quarkus:dev
+.\gradlew.bat quarkusDev
 
 # Eller kör den färdigbyggda applikationen
-java -jar target/quarkus-app/quarkus-run.jar
+java -jar build\quarkus-app\quarkus-run.jar
 ```
 
 API är då tillgänglig på `http://localhost:8080`

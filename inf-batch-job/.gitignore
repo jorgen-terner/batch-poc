@@ -10,11 +10,17 @@
 target/
 build/
 dist/
+.gradle/
+out/
 
-# Maven
+# Gradle
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+!gradlew
+!gradlew.bat
+
+# Maven (legacy)
 .mvn/
-mvnw
-mvnw.cmd
 
 # OS
 .DS_Store
