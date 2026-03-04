@@ -1,7 +1,7 @@
 param(
   [string]$Namespace = "batch",
-  [string]$Release = "trigger-api",
-  [string]$ImageName = "trigger-job-api",
+  [string]$Release = "batch-api",
+  [string]$ImageName = "inf-batch-job",
   [string]$ImageTag = "latest",
   [switch]$SkipBuild,
   [switch]$SkipInstall
@@ -56,7 +56,7 @@ if (-not (Test-CommandExists -CommandName "helm")) {
 
 if (-not $SkipBuild) {
   Write-Host "=== Bygger Docker-image ==="
-  docker build -t "${ImageName}:${ImageTag}" ./trigger-job-api | Out-Host
+  docker build -t "${ImageName}:${ImageTag}" ./inf-batch-job | Out-Host
   if ($LASTEXITCODE -ne 0) {
     throw "Docker-build misslyckades"
   }
@@ -70,7 +70,7 @@ if (-not $SkipInstall) {
   kubectl create namespace $Namespace --dry-run=client -o yaml | kubectl apply -f - | Out-Host
   
   # Installera chart
-  helm upgrade --install $Release ./helm/trigger-job-api `
+  helm upgrade --install $Release ./helm/inf-batch-job `
     --namespace $Namespace `
     --set image.repository=$ImageName `
     --set image.tag=$ImageTag `
@@ -84,12 +84,12 @@ if (-not $SkipInstall) {
 }
 
 Write-Host "`n=== Väntar på deployment ==="
-Wait-DeploymentReady -Namespace $Namespace -Deployment "trigger-job-api"
+Wait-DeploymentReady -Namespace $Namespace -Deployment "inf-batch-job"
 
 Write-Host "`n=== Startar port-forward ==="
 $pfJob = Start-Job -ScriptBlock {
   param($Namespace)
-  kubectl -n $Namespace port-forward svc/trigger-job-api 8080:8080 2>&1 | Out-Null
+  kubectl -n $Namespace port-forward svc/inf-batch-job 8080:8080 2>&1 | Out-Null
 } -ArgumentList $Namespace
 
 Start-Sleep -Seconds 2

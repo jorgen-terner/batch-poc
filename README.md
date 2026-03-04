@@ -4,7 +4,7 @@ Kubernetes Job Manager - En komplett REST API för att externalt managing Kubern
 
 ## Arkitektur
 
-**Trigger Job API** - En Quarkus Web-applikation som:
+**INF Batch Job** - En Quarkus Web-applikation som:
 - Tar emot HTTP POST-anrop med Docker-image och konfiguration
 - Skapar dynamiska Kubernetes Jobs via API
 - Returnerar Job-status och loggar
@@ -15,13 +15,13 @@ Kubernetes Job Manager - En komplett REST API för att externalt managing Kubern
 
 ```
 .
-├── trigger-job-api/              # Quarkus applikation (Java)
+├── inf-batch-job/              # Quarkus applikation (Java)
 │   ├── src/
 │   ├── pom.xml
 │   ├── Dockerfile
 │   └── README.md
 ├── helm/
-│   └── trigger-job-api/          # Helm Chart för deployment
+│   └── inf-batch-job/          # Helm Chart för deployment
 │       ├── Chart.yaml
 │       ├── values.yaml
 │       ├── templates/
@@ -47,19 +47,19 @@ Kubernetes Job Manager - En komplett REST API för att externalt managing Kubern
 
 **1. Bygg Docker-image:**
 ```bash
-docker build -t trigger-job-api:1.0.0 ./trigger-job-api
+docker build -t inf-batch-job:1.0.0 ./inf-batch-job
 ```
 
 **2. Push till registry (om inte localhost):**
 ```bash
-docker tag trigger-job-api:1.0.0 your-registry/trigger-job-api:1.0.0
-docker push your-registry/trigger-job-api:1.0.0
+docker tag inf-batch-job:1.0.0 your-registry/inf-batch-job:1.0.0
+docker push your-registry/inf-batch-job:1.0.0
 ```
 
 **3. Installera med Helm:**
 ```bash
-helm install trigger-api ./helm/trigger-job-api \
-  --set image.repository=trigger-job-api \
+helm install batch-api ./helm/inf-batch-job \
+  --set image.repository=inf-batch-job \
   --set image.tag=1.0.0 \
   -n batch --create-namespace
 ```
@@ -74,7 +74,7 @@ kubectl get svc -n batch
 
 ### Exponera API lokalt:
 ```bash
-kubectl port-forward svc/trigger-job-api 8080:8080 -n batch
+kubectl port-forward svc/inf-batch-job 8080:8080 -n batch
 ```
 
 ### Starta ett Job
@@ -137,8 +137,8 @@ curl -X DELETE http://localhost:8080/api/jobs/my-image-processor-1234
 
 ## Detaljerad dokumentation
 
-- [Trigger Job API applikation](trigger-job-api/README.md)
-- [Helm Chart konfiguration](helm/trigger-job-api/README.md)
+- [INF Batch Job applikation](inf-batch-job/README.md)
+- [Helm Chart konfiguration](helm/inf-batch-job/README.md)
 
 ## Test-skript
 
@@ -158,7 +158,7 @@ kubectl describe pod <pod-namn> -n batch
 
 **Läs logs från API:**
 ```bash
-kubectl logs deployment/trigger-job-api -n batch
+kubectl logs deployment/inf-batch-job -n batch
 ```
 
 **Verifiera Jobs:**
@@ -173,8 +173,8 @@ kubectl logs job/<job-namn> -n batch
 
 **Kontrollera RBAC-permissions:**
 ```bash
-kubectl describe role trigger-job-api -n batch
-kubectl describe rolebinding trigger-job-api -n batch
+kubectl describe role inf-batch-job -n batch
+kubectl describe rolebinding inf-batch-job -n batch
 ```
 
 ## API-status

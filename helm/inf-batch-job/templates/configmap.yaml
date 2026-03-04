@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "inf-batch-job.fullname" . }}-config
+  labels:
+    {{- include "inf-batch-job.labels" . | nindent 4 }}
+data:
+  application.yaml: |
+    quarkus:
+      application:
+        name: inf-batch-job
+      http:
+        port: {{ .Values.service.targetPort }}
+    app:
+      log-level: {{ .Values.app.logLevel }}
+    kubernetes:
+      namespace: {{ .Values.kubernetesApi.namespace }}
+      job-ttl-seconds: {{ .Values.kubernetesApi.jobTTLSecondsAfterFinished }}
