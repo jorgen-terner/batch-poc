@@ -26,9 +26,21 @@ Content-Type: application/json
     "CONFIG_URL": "http://config-service"
   },
   "imagePullPolicy": "IfNotPresent",
-  "ttlSecondsAfterFinished": 86400
+  "ttlSecondsAfterFinished": 86400,
+  "parallelism": 3,
+  "completions": 5
 }
 ```
+
+**Fält:**
+- `jobName` (required): Namn på jobbet
+- `image` (required): Docker-image att köra
+- `command` (optional): Kommando att exekvera
+- `env` (optional): Miljövariabler
+- `imagePullPolicy` (optional): IfNotPresent, Always, eller Never
+- `ttlSecondsAfterFinished` (optional): Sekunder innan Job raderas efter avslut
+- `parallelism` (optional): Antal pods som körs parallellt
+- `completions` (optional): Antal framgångsrika kompletteringar som krävs
 
 **Response (201 Created):**
 ```json

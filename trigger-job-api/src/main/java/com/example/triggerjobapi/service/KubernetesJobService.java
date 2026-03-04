@@ -65,6 +65,14 @@ public class KubernetesJobService {
             : defaultTtlSeconds);
         spec.setBackoffLimit(3);
 
+        // Sätt parallelism och completions om angivna
+        if (request.getParallelism() != null && request.getParallelism() > 0) {
+            spec.setParallelism(request.getParallelism());
+        }
+        if (request.getCompletions() != null && request.getCompletions() > 0) {
+            spec.setCompletions(request.getCompletions());
+        }
+
         V1PodTemplateSpec podTemplate = new V1PodTemplateSpec();
         V1ObjectMeta podMetadata = new V1ObjectMeta();
         podMetadata.setName(jobName);

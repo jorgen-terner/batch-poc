@@ -88,7 +88,9 @@ curl -X POST http://localhost:8080/api/jobs \
     "command": ["echo", "Hello from Kubernetes!"],
     "env": {
       "MY_VAR": "value"
-    }
+    },
+    "parallelism": 2,
+    "completions": 5
   }'
 ```
 

@@ -28,4 +28,8 @@ public class JobStartRequest {
     private String imagePullPolicy;
 
     private int ttlSecondsAfterFinished;
+
+    private Integer parallelism;
+
+    private Integer completions;
 }
