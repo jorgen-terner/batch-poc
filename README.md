@@ -4,17 +4,18 @@ Kubernetes Job Manager - En komplett REST API för att externalt managing Kubern
 
 ## Arkitektur
 
-**Trigger Job API** - En Spring Boot Web-applikation som:
+**Trigger Job API** - En Quarkus Web-applikation som:
 - Tar emot HTTP POST-anrop med Docker-image och konfiguration
 - Skapar dynamiska Kubernetes Jobs via API
 - Returnerar Job-status och loggar
 - Är deployad via Helm med full RBAC-support
+- Snabb start-tid och låg minnesförbrukning
 
 ## Struktur
 
 ```
 .
-├── trigger-job-api/              # Spring Boot applikation (Java)
+├── trigger-job-api/              # Quarkus applikation (Java)
 │   ├── src/
 │   ├── pom.xml
 │   ├── Dockerfile
@@ -176,9 +177,11 @@ kubectl describe rolebinding trigger-job-api -n batch
 
 ## API-status
 
-Hälsokontroll via Spring Boot Actuator:
+Hälsokontroll via Quarkus SmallRye Health:
 
 ```bash
 curl http://localhost:8080/actuator/health
 ```
+
+Obs: Health-endpointen är konfigurerad på samma path som tidigare för kompatibilitet.
 ````

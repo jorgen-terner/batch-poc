@@ -97,8 +97,11 @@ För lokal utveckling med Minikube/Docker Desktop Kubernetes:
 # Bygg applikationen
 mvn clean package
 
-# Kör Spring Boot appen
-mvn spring-boot:run
+# Kör Quarkus i dev-läge (med hot reload)
+mvn quarkus:dev
+
+# Eller kör den färdigbyggda applikationen
+java -jar target/quarkus-app/quarkus-run.jar
 ```
 
 API är då tillgänglig på `http://localhost:8080`
@@ -125,13 +128,13 @@ trigger-job-api/
 ├── src/
 │   ├── main/
 │   │   ├── java/com/example/triggerjobapi/
-│   │   │   ├── controller/       # REST-endpoints
+│   │   │   ├── controller/       # JAX-RS REST-endpoints
 │   │   │   ├── service/          # K8s-logik
 │   │   │   ├── dto/              # Request/Response-modeller
-│   │   │   ├── config/           # Spring-konfiguration
+│   │   │   ├── config/           # CDI Producers
 │   │   │   └── exception/        # Custom-exceptions
 │   │   └── resources/
-│   │       └── application.properties
+│   │       └── application.properties  # Quarkus-konfiguration
 │   └── test/
 ├── pom.xml
 ├── Dockerfile
