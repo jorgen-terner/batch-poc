@@ -1,0 +1,8 @@
+target/
+.git
+.gitignore
+README.md
+.mvn
+*.log
+.DS_Store
+node_modules/

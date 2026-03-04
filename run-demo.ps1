@@ -1,8 +1,9 @@
 param(
   [string]$Namespace = "batch",
-  [string]$BaseRelease = "batch-demo",
-  [string]$SpringRelease = "sb-example",
-  [string]$ScriptRelease = "script-example",
+  [string]$Release = "trigger-api",
+  [string]$ImageName = "trigger-job-api",
+  [string]$ImageTag = "latest",
+  [switch]$SkipBuild,
   [switch]$SkipInstall
 )
 
@@ -17,75 +18,142 @@ function Test-CommandExists {
 function Wait-DeploymentReady {
   param(
     [string]$Namespace,
-    [string]$Name,
+    [string]$Deployment,
     [int]$TimeoutSeconds = 180
   )
 
-  Write-Host "Väntar på deployment/$Name i namespace $Namespace..."
-  kubectl -n $Namespace rollout status deployment/$Name --timeout="${TimeoutSeconds}s" | Out-Host
+  Write-Host "Väntar på deployment/$Deployment i namespace $Namespace..."
+  kubectl -n $Namespace rollout status deployment/$Deployment --timeout="${TimeoutSeconds}s" | Out-Host
+}
+
+function Wait-HealthCheck {
+  param([int]$TimeoutSeconds = 30)
+  
+  $start = Get-Date
+  while ((Get-Date) - $start -lt [TimeSpan]::FromSeconds($TimeoutSeconds)) {
+    try {
+      $response = Invoke-RestMethod -Uri "http://localhost:8080/actuator/health" -ErrorAction SilentlyContinue
+      if ($response.status -eq "UP") {
+        Write-Host "✓ API är redo"
+        return
+      }
+    }
+    catch {
+      # API inte redo än
+    }
+    Start-Sleep -Seconds 1
+  }
+  Write-Host "⚠ API hälsa timeout - försöker ändå att köra test"
 }
 
 if (-not (Test-CommandExists -CommandName "kubectl")) {
-  throw "kubectl hittades inte i PATH."
+  throw "kubectl hittades inte i PATH"
 }
 
 if (-not (Test-CommandExists -CommandName "helm")) {
-  throw "helm hittades inte i PATH."
+  throw "helm hittades inte i PATH"
+}
+
+if (-not $SkipBuild) {
+  Write-Host "=== Bygger Docker-image ==="
+  docker build -t "${ImageName}:${ImageTag}" ./trigger-job-api | Out-Host
+  if ($LASTEXITCODE -ne 0) {
+    throw "Docker-build misslyckades"
+  }
+  Write-Host "✓ Docker-image byggd: ${ImageName}:${ImageTag}"
 }
 
 if (-not $SkipInstall) {
-  Write-Host "Installerar/uppgraderar Helm charts..."
-  helm upgrade --install $BaseRelease ./helm/k8s-jobs-example -n $Namespace --create-namespace | Out-Host
-  helm upgrade --install $SpringRelease ./spring-batch-example -n $Namespace | Out-Host
-  helm upgrade --install $ScriptRelease ./script-example -n $Namespace | Out-Host
+  Write-Host "`n=== Installerar Helm Chart ==="
+  
+  # Skapa namespace
+  kubectl create namespace $Namespace --dry-run=client -o yaml | kubectl apply -f - | Out-Host
+  
+  # Installera chart
+  helm upgrade --install $Release ./helm/trigger-job-api `
+    --namespace $Namespace `
+    --set image.repository=$ImageName `
+    --set image.tag=$ImageTag `
+    --set image.pullPolicy=Never `
+    | Out-Host
+  
+  if ($LASTEXITCODE -ne 0) {
+    throw "Helm installation misslyckades"
+  }
+  Write-Host "✓ Helm Chart installationen"
 }
 
-$triggerDeployment = "$BaseRelease-k8s-jobs-example-trigger-api"
-$triggerService = "$BaseRelease-k8s-jobs-example-trigger-api"
+Write-Host "`n=== Väntar på deployment ==="
+Wait-DeploymentReady -Namespace $Namespace -Deployment "trigger-job-api"
 
-Wait-DeploymentReady -Namespace $Namespace -Name $triggerDeployment
-
-Write-Host "Startar port-forward mot service/$triggerService..."
+Write-Host "`n=== Startar port-forward ==="
 $pfJob = Start-Job -ScriptBlock {
-  param($Namespace, $Service)
-  kubectl -n $Namespace port-forward "svc/$Service" 8080:8080
-} -ArgumentList $Namespace, $triggerService
+  param($Namespace)
+  kubectl -n $Namespace port-forward svc/trigger-job-api 8080:8080 2>&1 | Out-Null
+} -ArgumentList $Namespace
 
-Start-Sleep -Seconds 3
+Start-Sleep -Seconds 2
+
+Write-Host "✓ Port-forward startat (localhost:8080)"
 
 try {
-  $springCron = "$SpringRelease-spring-batch-example-template"
-  $scriptCron = "$ScriptRelease-script-example-template"
-
-  Write-Host "Triggar Spring Batch-jobb från $springCron"
-  $springResponse = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/trigger/$springCron"
-  $springJobName = $springResponse.jobName
-
-  Write-Host "Triggar Script-jobb från $scriptCron"
-  $scriptResponse = Invoke-RestMethod -Method Post -Uri "http://localhost:8080/trigger/$scriptCron"
-  $scriptJobName = $scriptResponse.jobName
-
-  Write-Host "Skapade jobb:"
-  Write-Host "- Spring: $springJobName"
-  Write-Host "- Script: $scriptJobName"
-
+  Write-Host "`n=== Testar API ==="
+  
+  Wait-HealthCheck
+  
+  Write-Host "`nTest 1: Starta ett busybox-job"
+  $jobRequest = @{
+    jobName = "test-job"
+    image = "busybox:latest"
+    command = @("echo", "Hello from Kubernetes!")
+    env = @{
+      "TEST_VAR" = "test-value"
+    }
+  } | ConvertTo-Json
+  
+  Write-Host "Request body:"
+  Write-Host $jobRequest
+  
+  $response = Invoke-RestMethod -Method Post `
+    -Uri "http://localhost:8080/api/jobs" `
+    -ContentType "application/json" `
+    -Body $jobRequest
+  
+  $jobId = $response.jobId
+  Write-Host "✓ Job startat: $jobId"
+  Write-Host "  Respons: $($response | ConvertTo-Json)"
+  
   Start-Sleep -Seconds 2
-
-  Write-Host "Hämtar status via trigger-API"
-  $springStatus = Invoke-RestMethod -Method Get -Uri "http://localhost:8080/jobs/$springJobName"
-  $scriptStatus = Invoke-RestMethod -Method Get -Uri "http://localhost:8080/jobs/$scriptJobName"
-
-  Write-Host "Spring status: $($springStatus.phase) (active=$($springStatus.active), succeeded=$($springStatus.succeeded), failed=$($springStatus.failed))"
-  Write-Host "Script status: $($scriptStatus.phase) (active=$($scriptStatus.active), succeeded=$($scriptStatus.succeeded), failed=$($scriptStatus.failed))"
-
-  Write-Host "\nTips:"
-  Write-Host "kubectl get jobs -n $Namespace"
-  Write-Host "kubectl logs job/$springJobName -n $Namespace"
-  Write-Host "kubectl logs job/$scriptJobName -n $Namespace"
+  
+  Write-Host "`nTest 2: Hämta Job-status"
+  $statusResponse = Invoke-RestMethod -Method Get `
+    -Uri "http://localhost:8080/api/jobs/$jobId"
+  
+  Write-Host "✓ Job-status:"
+  Write-Host $($statusResponse | ConvertTo-Json -Depth 3)
+  
+  Write-Host "`nTest 3: Lista alla Jobs"
+  $listResponse = Invoke-RestMethod -Method Get `
+    -Uri "http://localhost:8080/api/jobs"
+  
+  Write-Host "✓ Antal Jobs: $($listResponse.Count)"
+  
+  Write-Host "`n=== Demo slutförda ==="
+  Write-Host "`nNyttiga kommandon:"
+  Write-Host "  kubectl get jobs -n $Namespace"
+  Write-Host "  kubectl logs job/$jobId -n $Namespace"
+  Write-Host "  kubectl describe job/$jobId -n $Namespace"
+  Write-Host "  kubectl get pods -n $Namespace"
+}
+catch {
+  Write-Host "✗ Fel under test: $_" -ForegroundColor Red
+  throw
 }
 finally {
   if ($pfJob) {
+    Write-Host "`nRengör port-forward..."
     Stop-Job -Job $pfJob -ErrorAction SilentlyContinue | Out-Null
     Remove-Job -Job $pfJob -Force -ErrorAction SilentlyContinue | Out-Null
   }
 }
+
