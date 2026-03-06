@@ -1,58 +1,37 @@
+defaultName: inf-batch-job
+defaultImageName: inf-batch-job
+cluster: fkds1
 replicaCount: 1
-
-image:
-  registry: docker.io
-  repository: inf-batch-job
-  pullPolicy: IfNotPresent
-  tag: "latest"
-
-nameOverride: ""
-fullnameOverride: ""
-
-service:
-  type: ClusterIP
-  port: 8080
-  targetPort: 8080
-
-ingress:
-  enabled: false
-  className: "nginx"
-  annotations: {}
-  hosts:
-    - host: api.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-
-resources:
-  limits:
-    cpu: 500m
-    memory: 512Mi
-  requests:
-    cpu: 250m
-    memory: 256Mi
 
 autoscaling:
   enabled: false
-  minReplicas: 1
-  maxReplicas: 3
-  targetCPUUtilizationPercentage: 80
 
-nodeSelector: {}
-tolerations: []
-affinity: {}
+image:
+  registry: image-registry.openshift-image-registry.svc:5000
+  repository: cap-template/inf-batch-job
+  tag: latest
+  pullPolicy: IfNotPresent
 
-# Kubernetes API server config
-kubernetesApi:
-  namespace: default
-  jobTTLSecondsAfterFinished: 86400  # 24 hours
+service:
+  targetPort: 8080
 
-# Application config
 app:
   logLevel: INFO
 
-# Service Account
-serviceAccount:
-  create: true
-  name: ""
+kubernetesApi:
+  namespace: default
+  jobTTLSecondsAfterFinished: 300
+
+resources: {}
+nodeSelector: {}
+affinity: {}
+tolerations: []
+
+pipeline:
+  repository:
+    url: ssh://git@scm.sfa.se:7999/~66030457/inf-batch-poc.git
+    revision: main
+  image:
+    java: image-registry.openshift-image-registry.svc:5000/cap-template/openjdk-17:1.21-1.1739757859-fk1
+  nginx:
+    image: image-registry.openshift-image-registry.svc:5000/cap-template/nginx:1.29.0-otel-fk1    

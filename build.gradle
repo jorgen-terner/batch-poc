@@ -1,0 +1,56 @@
+plugins {
+    alias(libs.plugins.sonarqube)
+    alias(libs.plugins.sonatype.scan)
+}
+
+allprojects {
+    version = "0.1.0"
+}
+
+subprojects {
+    apply plugin: 'java'
+
+    repositories {
+        mavenLocal()
+        maven { url = "https://java.repo.xxx.se/repository/java-all/" }
+    }
+
+    compileJava {
+        options.encoding = 'UTF-8'
+        options.compilerArgs << '-parameters' << "--release" << "17"
+    }
+
+    compileTestJava {
+        options.encoding = 'UTF-8'
+    }
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    test {
+        testLogging {
+            events "passed", "skipped", "failed"
+        }
+    }
+}
+
+sonar {
+    // Användare/token och/eller lösenord sätts via `sonar.login` och `sonar.password`
+    properties {
+        property "sonar.sourceEncoding", "UTF-8"
+        property "sonar.branch.name", project.properties.get("branch.name")
+        property "sonar.projectKey", "${group}:${project.rootProject.name}"
+        property "sonar.host.url", "http://sonar-latest.xxx.se"
+        property "sonar.coverage.jacoco.xmlReportPaths", "**/jacoco-report/jacoco.xml"
+    }
+}
+
+nexusIQScan {
+    serverUrl = project.hasProperty("nexusiq.serverurl") ? project.property("nexusiq.serverurl") : 'https://secscan.xxx.se'
+    username = project.properties.get("nexusiq.username")
+    password = project.properties.get("nexusiq.password")
+    stage = project.hasProperty("nexusiq.stage") ? project.property("nexusiq.stage") : "develop"
+    applicationId = "${project.group}" ? "${project.group}_${project.name}" : "${project.name}"
+}

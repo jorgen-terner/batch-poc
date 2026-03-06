@@ -1,0 +1,21 @@
+[versions]
+reflections = "0.10.2"
+wiremock = "1.5.3"
+prometheus = "1.4.3"
+snappy-java = "1.1.10.7"
+
+# Plugins
+sonarqube = "7.2.2.6593"
+sonatype-scan = "3.0.0"
+
+
+[libraries]
+reflections = { module = "org.reflections:reflections", version.ref = "reflections" }
+wiremock = { module = "io.quarkiverse.wiremock:quarkus-wiremock", version.ref = "wiremock" }
+wiremock-test = { module = "io.quarkiverse.wiremock:quarkus-wiremock-test", version.ref = "wiremock" }
+prometheus-metrics-core = { module = "io.prometheus:prometheus-metrics-core", version.ref = "prometheus" }
+snappy-java = { module = "org.xerial.snappy:snappy-java", version.ref = "snappy-java" }
+
+[plugins]
+sonarqube = { id = "org.sonarqube", version.ref = "sonarqube" }
+sonatype-scan = { id = "org.sonatype.gradle.plugins.scan", version.ref = "sonatype-scan" }

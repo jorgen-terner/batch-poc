@@ -5,6 +5,7 @@ metadata:
   labels:
     {{- include "inf-batch-job.labels" . | nindent 4 }}
 data:
+  {{- ($.Files.Glob "config/*").AsConfig | nindent 2 }}
   application.yaml: |
     quarkus:
       application:

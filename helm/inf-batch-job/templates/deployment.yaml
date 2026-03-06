@@ -1,3 +1,4 @@
+{{ $checksum := (printf "%s" (($.Files.Glob "config/*").AsConfig) | sha256sum) }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -13,16 +14,29 @@ spec:
       {{- include "inf-batch-job.selectorLabels" . | nindent 6 }}
   template:
     metadata:
+      annotations:
+        checksum/config: {{ $checksum }}    
       labels:
         {{- include "inf-batch-job.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "inf-batch-job.serviceAccountName" . }}
-      securityContext:
-        fsGroup: 1000
+      volumes:
+        - name: logs-pvc
+          persistentVolumeClaim:
+            claimName: {{ include "inf-batch-job.name.pvc" . }}
+        - name: nginx-conf
+          configMap:
+            name: {{ include "inf-batch-job.fullname" . }}-config
       containers:
       - name: {{ .Chart.Name }}
         image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command: ["java"]
+        args: ["-jar", "/deployments/quarkus-run.jar"]
+        volumeMounts:
+        - name: logs-pvc
+          mountPath: /logs
+        - name: nginx-conf
+          mountPath: /etc/nginx/conf.d
         ports:
         - name: http
           containerPort: {{ .Values.service.targetPort }}

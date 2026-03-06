@@ -1,15 +1,35 @@
+kind: List
 apiVersion: v1
-kind: Service
-metadata:
-  name: {{ include "inf-batch-job.fullname" . }}
-  labels:
-    {{- include "inf-batch-job.labels" . | nindent 4 }}
-spec:
-  type: {{ .Values.service.type }}
-  ports:
-    - port: {{ .Values.service.port }}
-      targetPort: http
-      protocol: TCP
-      name: http
-  selector:
-    {{- include "inf-batch-job.selectorLabels" . | nindent 4 }}
+items:
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: {{ include "inf-batch-job.name.nginx" . }}
+      labels:
+        {{- include "inf-batch-job.labels" . | indent 8 }}
+    spec:
+      ports:
+        - name: nginx
+          port: 8080
+          protocol: TCP
+          targetPort: 8080
+      selector:
+        app.kubernetes.io/name: {{ include "inf-batch-job.name.nginx" . }}
+
+{{- range $v := (.Values.builds) }}
+{{- $name := (printf "%s-%s" $.Release.Name $v.name) }}
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: {{ $name }}
+      labels:
+        {{- include "inf-batch-job.labels" $ | indent 8 }}
+    spec:
+      selector:
+        app.kubernetes.io/name: {{ $name }}
+      ports:
+        - name: http
+          port: 8080
+          protocol: TCP
+          targetPort: 8080
+{{- end }}

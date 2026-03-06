@@ -1,41 +1,49 @@
-{{- if .Values.ingress.enabled }}
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: {{ include "inf-batch-job.fullname" . }}
-  labels:
-    {{- include "inf-batch-job.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
-  annotations:
-    {{- toYaml . | nindent 4 }}
-  {{- end }}
-spec:
-  {{- if .Values.ingress.className }}
-  ingressClassName: {{ .Values.ingress.className }}
-  {{- end }}
-  {{- if .Values.ingress.tls }}
-  tls:
-    {{- range .Values.ingress.tls }}
-    - hosts:
-        {{- range .hosts }}
-        - {{ . | quote }}
-        {{- end }}
-      secretName: {{ .secretName }}
-    {{- end }}
-  {{- end }}
-  rules:
-    {{- range .Values.ingress.hosts }}
-    - host: {{ .host | quote }}
-      http:
-        paths:
-          {{- range .paths }}
-          - path: {{ .path }}
-            pathType: {{ .pathType }}
-            backend:
-              service:
-                name: {{ include "inf-batch-job.fullname" $ }}
-                port:
-                  number: {{ $.Values.service.port }}
-          {{- end }}
-    {{- end }}
+kind: List
+apiVersion: v1
+items:
+  - kind: Ingress
+    apiVersion: networking.k8s.io/v1
+    metadata:
+      name: {{ include "inf-batch-job.name.nginx" . }}
+      namespace: {{ .Release.Namespace }}
+      labels:
+        {{ include "inf-batch-job.labels" . | nindent 8 }}
+    spec:
+      rules:
+        - host: {{ .Release.Name }}.{{ .Release.Namespace }}.apps.{{ .Values.cluster | required "cluster is required" }}.sfa.se
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: {{ include "inf-batch-job.name.nginx" . }}
+                    port:
+                      number: 8080
+
+{{- range $v := (.Values.builds) }}
+{{- $name := (printf "%s-%s" $.Release.Name $v.name) }}
+  - kind: Ingress
+    apiVersion: networking.k8s.io/v1
+    metadata:
+      name: {{ $name }}
+      namespace: {{ $.Release.Namespace }}
+      labels:
+        {{ include "inf-batch-job.labels" $ | nindent 8 }}
+      annotations:
+        haproxy.router.openshift.io/balance: roundrobin
+        haproxy.router.openshift.io/disable_cookies: 'true'
+        haproxy.router.openshift.io/timeout: 30m # Long timeout to better support remote debugging
+    spec:
+      rules:
+        - host: {{ $name }}.{{ $.Release.Namespace }}.apps.{{ $.Values.cluster | required "cluster is required" }}.sfa.se
+          http:
+            paths:
+              - path: /api/jobs
+                pathType: Prefix
+                backend:
+                  service:
+                    name: {{ $name }}
+                    port:
+                      number: 8080
 {{- end }}

@@ -1,0 +1,14 @@
+pluginManagement {
+    repositories {
+        mavenLocal()
+        maven { url = "https://java.repo.xxx.se/repository/java-all/" }
+
+    }
+    plugins {
+        id "${quarkusPluginId}" version "${quarkusPluginVersion}"
+    }
+}
+
+rootProject.name = 'inf-batch-job'
+
+include 'inf-batch-job-app'
