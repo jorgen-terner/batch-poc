@@ -13,11 +13,12 @@ subprojects {
     repositories {
         mavenLocal()
         maven { url = "https://java.repo.xxx.se/repository/java-all/" }
+        mavenCentral()
     }
 
     compileJava {
         options.encoding = 'UTF-8'
-        options.compilerArgs << '-parameters' << "--release" << "17"
+        options.compilerArgs << '-parameters' << "--release" << "21"
     }
 
     compileTestJava {
@@ -25,8 +26,8 @@ subprojects {
     }
 
     java {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 
     test {

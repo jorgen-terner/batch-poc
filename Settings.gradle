@@ -2,7 +2,7 @@ pluginManagement {
     repositories {
         mavenLocal()
         maven { url = "https://java.repo.xxx.se/repository/java-all/" }
-
+        gradlePluginPortal()
     }
     plugins {
         id "${quarkusPluginId}" version "${quarkusPluginVersion}"
@@ -12,3 +12,4 @@ pluginManagement {
 rootProject.name = 'inf-batch-job'
 
 include 'inf-batch-job-app'
+include 'inf-batch-testapp1'
