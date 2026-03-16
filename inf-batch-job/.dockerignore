@@ -1,0 +1,33 @@
+# Source files - only need built artifacts
+src/
+gradle/
+*.gradle
+*.gradle.kts
+gradlew
+gradlew.bat
+gradle.properties
+settings.gradle.kts
+
+# Documentation
+README.md
+*.md
+
+# Build artifacts - exclude everything except quarkus-app
+build/
+!build/quarkus-app/
+!build/quarkus-app/**
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Git
+.git/
+.gitignore
+
+# Other
+.DS_Store
+*.log

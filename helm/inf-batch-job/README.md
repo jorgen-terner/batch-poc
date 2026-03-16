@@ -106,9 +106,36 @@ Se `values.yaml` för alla konfigurerbara parametrar.
 ## Endpoints
 
 - `POST /api/jobs` - Starta nytt Job
+- `POST /api/jobs/{jobId}/restart` - Restarta Job (skapar ny körning)
 - `GET /api/jobs` - Lista alla Jobs
 - `GET /api/jobs/{jobId}` - Hämta status på Job
 - `DELETE /api/jobs/{jobId}` - Stoppa/ta bort Job
+
+## JAVABATCH Exempel
+
+För att köra `example_javabatch.py` via inf-batch-job används en separat image och en ConfigMap
+med `BATCH_TYP=JAVABATCH`.
+
+Exempel på API-anrop (runtime-parameterisering av action och job args):
+
+```bash
+curl -X POST http://localhost:8080/api/jobs \
+	-H "Content-Type: application/json" \
+	-d '{
+		"configMapName": "inf-batch-javabatch-config",
+		"env": {
+			"JOB_ACTION": "restart",
+			"JOB_ARGS": "myJob=true"
+		}
+	}'
+```
+
+Rapporteringsregel:
+
+- `BATCH_TYP=JAVABATCH` -> statistik/status rapporteras enligt javabatch-monitor-modellen.
+- annan `BATCH_TYP` -> ingen statistikrapportering just nu.
+
+Se även [../../inf-batch-javabatch/README.md](../../inf-batch-javabatch/README.md).
 
 ## RBAC
 

@@ -6,10 +6,12 @@ import java.util.List;
 
 public class JobStartRequest {
 
-    @NotBlank(message = "jobName is required")
     private String jobName;
 
-    @NotBlank(message = "image is required")
+    @NotBlank(message = "configMapName is required")
+    private String configMapName;
+
+    // Optional: Om angiven överskrids ConfigMap-värden
     private String image;
 
     private List<String> command;
@@ -28,13 +30,14 @@ public class JobStartRequest {
     }
 
     public JobStartRequest(String jobName, String image, List<String> command, 
-                          Map<String, String> env, String imagePullPolicy, 
-                          int ttlSecondsAfterFinished, Integer parallelism, 
-                          Integer completions) {
+                          Map<String, String> env, String configMapName,
+                          String imagePullPolicy, int ttlSecondsAfterFinished, 
+                          Integer parallelism, Integer completions) {
         this.jobName = jobName;
         this.image = image;
         this.command = command;
         this.env = env;
+        this.configMapName = configMapName;
         this.imagePullPolicy = imagePullPolicy;
         this.ttlSecondsAfterFinished = ttlSecondsAfterFinished;
         this.parallelism = parallelism;
@@ -71,6 +74,14 @@ public class JobStartRequest {
 
     public void setEnv(Map<String, String> env) {
         this.env = env;
+    }
+
+    public String getConfigMapName() {
+        return configMapName;
+    }
+
+    public void setConfigMapName(String configMapName) {
+        this.configMapName = configMapName;
     }
 
     public String getImagePullPolicy() {
@@ -114,6 +125,7 @@ public class JobStartRequest {
         private String image;
         private List<String> command;
         private Map<String, String> env;
+        private String configMapName;
         private String imagePullPolicy;
         private int ttlSecondsAfterFinished;
         private Integer parallelism;
@@ -139,6 +151,11 @@ public class JobStartRequest {
             return this;
         }
 
+        public Builder configMapName(String configMapName) {
+            this.configMapName = configMapName;
+            return this;
+        }
+
         public Builder imagePullPolicy(String imagePullPolicy) {
             this.imagePullPolicy = imagePullPolicy;
             return this;
@@ -161,7 +178,8 @@ public class JobStartRequest {
 
         public JobStartRequest build() {
             return new JobStartRequest(jobName, image, command, env, 
-                imagePullPolicy, ttlSecondsAfterFinished, parallelism, completions);
+                configMapName, imagePullPolicy, ttlSecondsAfterFinished, 
+                parallelism, completions);
         }
     }
 }

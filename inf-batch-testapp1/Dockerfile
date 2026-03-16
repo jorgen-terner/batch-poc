@@ -1,27 +1,18 @@
-# Build stage
-FROM gradle:8.11.1-jdk21 AS builder
-
-WORKDIR /build
-
-# Copy entire project for build context
-COPY . .
-
-# Build only the testapp1 module
-WORKDIR /build
-RUN gradle :inf-batch-testapp1:build -x test --no-daemon
-
-# Runtime stage
+# Runtime-only image - expects pre-built artifacts
+# Build locally first: .\gradlew :inf-batch-testapp1:build -x test
+# For OpenShift: oc start-build inf-batch-testapp1 --from-dir=. --follow -n dev252
+# For Docker: docker build -t inf-batch-testapp1:latest .
 FROM registry.access.redhat.com/ubi8/openjdk-21-runtime:1.20
 
 WORKDIR /deployments
 
-ENV LANGUAGE='en_US:en'
+ENV LANGUAGE='sv_SE:sv'
 
-# Copy Quarkus fast-jar artifacts
-COPY --from=builder --chown=1000 /build/inf-batch-testapp1/build/quarkus-app/lib/ /deployments/lib/
-COPY --from=builder --chown=1000 /build/inf-batch-testapp1/build/quarkus-app/*.jar /deployments/
-COPY --from=builder --chown=1000 /build/inf-batch-testapp1/build/quarkus-app/app/ /deployments/app/
-COPY --from=builder --chown=1000 /build/inf-batch-testapp1/build/quarkus-app/quarkus/ /deployments/quarkus/
+# Copy pre-built Quarkus fast-jar artifacts from build/ directory
+COPY --chown=1000 build/quarkus-app/lib/ /deployments/lib/
+COPY --chown=1000 build/quarkus-app/*.jar /deployments/
+COPY --chown=1000 build/quarkus-app/app/ /deployments/app/
+COPY --chown=1000 build/quarkus-app/quarkus/ /deployments/quarkus/
 
 USER 1000
 

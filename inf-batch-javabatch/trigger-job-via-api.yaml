@@ -1,0 +1,39 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: trigger-javabatch-via-inf-batch-job
+  namespace: dev252
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: trigger
+        image: curlimages/curl:8.8.0
+        env:
+        - name: JOB_ACTION
+          value: restart
+        - name: JOB_ARGS
+          value: myJob=true
+        - name: CONFIGMAP_NAME
+          value: inf-batch-javabatch-config
+        command:
+        - /bin/sh
+        - -c
+        - |
+          set -eu
+          payload=$(cat <<JSON
+          {
+            "configMapName": "${CONFIGMAP_NAME}",
+            "env": {
+              "JOB_ACTION": "${JOB_ACTION}",
+              "JOB_ARGS": "${JOB_ARGS}"
+            }
+          }
+          JSON
+          )
+
+          curl -sS -X POST http://inf-batch-job:8080/api/jobs \
+            -H "Content-Type: application/json" \
+            -d "$payload"

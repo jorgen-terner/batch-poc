@@ -1,31 +1,21 @@
-# Build stage
-FROM gradle:8.11.1-jdk17 AS builder
-
-WORKDIR /app
-
-COPY build.gradle.kts settings.gradle.kts gradle.properties ./
-COPY gradle ./gradle
-COPY gradlew gradlew.bat ./
-RUN ./gradlew dependencies --no-daemon || true
-
-COPY src ./src
-RUN ./gradlew build -x test --no-daemon
-
-# Runtime stage
+# Runtime stage only - build artifacts are expected to exist locally
 FROM registry.access.redhat.com/ubi8/openjdk-17-runtime:1.18
 
-WORKDIR /app
+WORKDIR /deployments
 
-ENV LANGUAGE='en_US:en'
+ENV LANG=sv_SE.UTF-8
+ENV LANGUAGE=sv_SE:sv
+ENV LC_ALL=sv_SE.UTF-8
 
-# Quarkus fast-jar runtime
-COPY --from=builder --chown=1000 /app/build/quarkus-app/lib/ /deployments/lib/
-COPY --from=builder --chown=1000 /app/build/quarkus-app/*.jar /deployments/
-COPY --from=builder --chown=1000 /app/build/quarkus-app/app/ /deployments/app/
-COPY --from=builder --chown=1000 /app/build/quarkus-app/quarkus/ /deployments/quarkus/
+# Copy pre-built Quarkus fast-jar artifacts
+COPY --chown=1000 build/quarkus-app/lib/ /deployments/lib/
+COPY --chown=1000 build/quarkus-app/*.jar /deployments/
+COPY --chown=1000 build/quarkus-app/app/ /deployments/app/
+COPY --chown=1000 build/quarkus-app/quarkus/ /deployments/quarkus/
 
 EXPOSE 8080
 USER 1000
 
-ENV JAVA_OPTS="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager"
-ENV JAVA_APP_JAR="/deployments/quarkus-run.jar"
+ENV JAVA_OPTS="-Dquarkus.http.host=0.0.0.0 -Djava.util.logging.manager=org.jboss.logmanager.LogManager -Duser.language=sv -Duser.country=SE"
+
+ENTRYPOINT ["java", "-jar", "/deployments/quarkus-run.jar"]

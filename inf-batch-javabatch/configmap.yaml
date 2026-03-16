@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inf-batch-javabatch-config
+  namespace: dev252
+  labels:
+    app: inf-batch-javabatch
+    version: "1.0"
+data:
+  # Job config som lases av inf-batch-job
+  image: "image-registry.openshift-image-registry.svc:5000/dev252/inf-batch-javabatch:latest"
+  imagePullPolicy: "Always"
+  jobName: "javabatch"
+  parallelism: "1"
+  completions: "1"
+  ttlSecondsAfterFinished: "3600"
+  backoffLimit: "0"
+
+  # Typstyrning for rapportering i inf-batch-job
+  BATCH_TYP: "JAVABATCH"
+
+  # Parametrar till javabatch-script image
+  JOB_ACTION: "restart"
+  JOB_ARGS: "myJob=true"
+  FKST_TOKEN: ""
+
+  # Endpoints som entrypoint.sh mappar till ini-fil
+  SPRINGBATCH_V2_START: "https://replace.example/api/start"
+  SPRINGBATCH_V2_STATUS: "https://replace.example/api/status"
+  SPRINGBATCH_V2_STOP: "https://replace.example/api/stop"
+  SPRINGBATCH_V2_RESTART: "https://replace.example/api/restart"
+  SPRINGBATCH_V2_SUMMARY: "https://replace.example/api/summary"
+  SPRINGBATCH_V2_HELP: "https://replace.example/api/help"
+
+  # Falt som anvands i metrics-rapportering
+  TO_JOB_NAME: "JAVABATCH_SAMPLE"
+  TO_ENV_NAME: "BATCH-POC"

@@ -86,4 +86,29 @@ public class JobController {
                 .build();
         }
     }
+
+    /**
+     * Starta om ett befintligt Job genom att skapa en ny körning med samma grundkonfiguration.
+     */
+    @POST
+    @Path("/{jobId}/restart")
+    public Response restartJob(@PathParam("jobId") String jobId) {
+        try {
+            String restartedJobId = jobService.restartJob(jobId);
+            JobStartResponse response = JobStartResponse.builder()
+                .jobId(restartedJobId)
+                .jobName(restartedJobId)
+                .message("Job restartat framgångsrikt")
+                .success(true)
+                .build();
+            return Response.status(Response.Status.CREATED).entity(response).build();
+        } catch (JobException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity(JobStartResponse.builder()
+                    .message(e.getMessage())
+                    .success(false)
+                    .build())
+                .build();
+        }
+    }
 }

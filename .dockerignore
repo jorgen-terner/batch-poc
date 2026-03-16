@@ -1,0 +1,38 @@
+# Exclude build outputs except for inf-batch-testapp1
+build/
+*/build/
+!inf-batch-testapp1/build/quarkus-app/
+
+# Exclude other modules
+inf-batch-job/
+inf-batch-job-app/
+
+# Exclude git files
+.git/
+.gitignore
+
+# Exclude IDE files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Exclude helm charts
+helm/
+
+# Exclude kubernetes manifests
+*.yaml
+!inf-batch-testapp1/*.yaml
+
+# Exclude documentation
+README.md
+!inf-batch-testapp1/README.md
+
+# Exclude test files that aren't needed
+**/*test*/
+!inf-batch-testapp1/src/test/
+
+# Exclude gradle cache
+.gradle/
+*/.gradle/

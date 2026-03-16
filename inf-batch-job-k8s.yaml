@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: List
+items:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: inf-batch-job-role
+      labels:
+        app: inf-batch-job
+    rules:
+      - apiGroups: ["batch"]
+        resources: ["jobs"]
+        verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: inf-batch-job-rolebinding
+      labels:
+        app: inf-batch-job
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: inf-batch-job-role
+    subjects:
+      - kind: ServiceAccount
+        name: duplosa
+  - apiVersion: apps/v1
+    kind: Deployment
+metadata:
+  name: inf-batch-job
+  labels:
+    app: inf-batch-job
+    system: duplo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inf-batch-job
+      deployment: inf-batch-job
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  template:
+    metadata:
+      labels:
+        app: inf-batch-job
+        deployment: inf-batch-job
+        runtime: cop-filebeat
+    spec:
+      serviceAccountName: duplosa
+      containers:
+        - name: inf-batch-job
+          image: "${INTERNAL_REGISTRY}/${NAMESPACE}/inf_batch_job:__IMAGE_VERSION__"
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: inf-batch-job-database-environment
+          volumeMounts:
+            - name: app-config
+              mountPath: /deployments/config/
+          resources:
+            limits:
+              cpu: "1"
+              memory: "512Mi"
+            requests:
+              cpu: "1m"
+              memory: "256Mi"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /q/health/started
+              port: 8080
+              scheme: HTTP
+            timeoutSeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 10
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: 8080
+              scheme: HTTP
+            timeoutSeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: 8080
+              scheme: HTTP
+            timeoutSeconds: 15
+            periodSeconds: 60
+            successThreshold: 1
+            failureThreshold: 2
+      volumes:
+        - name: app-config
+          configMap:
+            name: inf-batch-job-config
+            items:
+              - key: application.properties
+                path: application.properties
+            defaultMode: 420
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext:
+        runAsUser: 1000100055
+        supplementalGroups:
+          - 4002
+      schedulerName: default-scheduler
+parameters:
+  - name: INTERNAL_REGISTRY
+    displayName: Imagestream source repo
+    description: Repository server to fetch images from.
+    value: image-registry.openshift-image-registry.svc:5000
+
+  - name: NAMESPACE
+    displayName: Imagestream source namespace
+    description: Source namespace to fetch images from.
+    required: true
