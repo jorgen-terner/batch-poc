@@ -1,0 +1,48 @@
+plugins {
+    id 'java'
+    id 'io.quarkus' version "${quarkusPluginVersion}"
+}
+
+group = 'com.batchjobapp'
+version = '0.1.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+    implementation 'io.quarkus:quarkus-arc'
+    implementation 'io.quarkus:quarkus-rest-jackson'
+    implementation 'io.quarkus:quarkus-smallrye-health'
+
+    implementation 'io.fabric8:kubernetes-client:6.13.4'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2'
+    implementation 'info.picocli:picocli:4.7.6'
+
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.rest-assured:rest-assured'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+}
+
+tasks.register('runCli', JavaExec) {
+    group = 'application'
+    description = 'Run the batch-job CLI'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.batchjobapp.cli.BatchJobCli'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

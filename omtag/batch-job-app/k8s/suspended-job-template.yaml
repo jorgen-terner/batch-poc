@@ -1,0 +1,18 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: sample-batch-job
+  namespace: default
+spec:
+  suspend: true
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: batch-worker
+          image: myregistry/my-batch-worker:1.0.0
+          env:
+            - name: REPORT_URL
+              value: "http://batch-job-app.default.svc.cluster.local:8080/api/v1/jobs/default/sample-batch-job/report"

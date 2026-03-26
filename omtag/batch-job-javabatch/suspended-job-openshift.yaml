@@ -1,0 +1,57 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: __JOB_NAME__
+spec:
+  suspend: true
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: __JOB_NAME__
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: javabatch-worker
+          image: python:3.12-slim
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              if ! python3 -c "import requests" >/dev/null 2>&1; then
+                pip3 install --no-cache-dir requests
+              fi
+              mkdir -p /openprocess/scripts/rfvop/jbatch
+              cp /opt/jbatch/monitor_jbatch.sh /openprocess/scripts/rfvop/jbatch/monitor_jbatch.sh
+              chmod +x /openprocess/scripts/rfvop/jbatch/monitor_jbatch.sh
+              chmod +x /opt/jbatch/*.sh
+              exec /opt/jbatch/javabatch_worker.sh
+          env:
+            - name: JOB_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: JOB_NAME
+              value: __JOB_NAME__
+            - name: JOB_CONFIG
+              value: /opt/jbatch/springbatch_job.ini
+            - name: JOB_ARGS
+              value: defaultJob
+            - name: FKST_TOKEN
+              value: ""
+            - name: BATCH_APP_BASE_URL
+              value: http://batch-job-app.default.svc.cluster.local:8080
+            - name: REPORT_INTERVAL_SECONDS
+              value: "10"
+            - name: ENABLE_PROGRESS_REPORT
+              value: "false"
+          volumeMounts:
+            - name: jbatch-scripts
+              mountPath: /opt/jbatch
+      volumes:
+        - name: jbatch-scripts
+          configMap:
+            name: javabatch-job-scripts
+            defaultMode: 0755
