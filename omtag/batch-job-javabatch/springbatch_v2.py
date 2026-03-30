@@ -4,12 +4,39 @@ import getopt
 import sys
 import json
 import time
-import requests
 import os
 import subprocess
 import signal
 import configparser
 import functools
+
+try:
+    import requests
+except ImportError:
+    from urllib import error, request
+
+    class _CompatResponse:
+        def __init__(self, status_code, content):
+            self.status_code = status_code
+            self.content = content
+            self.encoding = 'utf-8'
+
+        @property
+        def text(self):
+            return self.content.decode(self.encoding, errors='replace')
+
+    class _RequestsCompat:
+        @staticmethod
+        def get(url, headers=None, timeout=30):
+            req = request.Request(url, headers=headers or {}, method='GET')
+            try:
+                with request.urlopen(req, timeout=timeout) as resp:
+                    return _CompatResponse(resp.getcode(), resp.read())
+            except error.HTTPError as exc:
+                return _CompatResponse(exc.code, exc.read())
+
+    requests = _RequestsCompat()
+
 print = functools.partial(print, flush=True)
 #
 #Viktigt: Glöm inte att meddela AppDrift om förändringer sker i detta skript. De lyfter in skriptet manuellt under en övergångsperiod
