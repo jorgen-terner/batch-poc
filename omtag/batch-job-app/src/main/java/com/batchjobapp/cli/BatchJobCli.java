@@ -7,9 +7,8 @@ import com.batchjobapp.store.JobReportStore;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import io.fabric8.kubernetes.client.Config;
-import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -58,8 +57,7 @@ public final class BatchJobCli implements Runnable {
 
     private JobControlService service() {
         if (jobControlService == null) {
-            Config config = Config.autoConfigure(null);
-            kubernetesClient = new DefaultKubernetesClient(config);
+            kubernetesClient = new KubernetesClientBuilder().build();
             jobControlService = new JobControlService(kubernetesClient, new JobReportStore());
         }
         return jobControlService;

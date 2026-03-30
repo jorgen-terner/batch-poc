@@ -1,9 +1,8 @@
 package com.batchjobapp.config;
 
 import com.batchjobapp.store.JobReportStore;
-import io.fabric8.kubernetes.client.Config;
-import io.fabric8.kubernetes.client.DefaultKubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
@@ -16,7 +15,7 @@ public class AppConfig {
     @ApplicationScoped
     public KubernetesClient kubernetesClient() {
         if (kubernetesClient == null) {
-            kubernetesClient = new DefaultKubernetesClient(Config.autoConfigure(null));
+            kubernetesClient = new KubernetesClientBuilder().build();
         }
         return kubernetesClient;
     }

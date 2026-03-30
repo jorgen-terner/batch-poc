@@ -7,11 +7,13 @@ import com.batchjobapp.model.JobStatusResponse;
 import com.batchjobapp.service.JobControlService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 
 import java.util.Map;
@@ -35,8 +37,13 @@ public class JobResource {
 
     @POST
     @Path("api/v1/jobs/{namespace}/{jobName}/start")
-    public ActionResponse start(@PathParam("namespace") String namespace, @PathParam("jobName") String jobName) {
-        return jobControlService.start(namespace, jobName);
+    public JobStatusResponse start(
+        @PathParam("namespace") String namespace,
+        @PathParam("jobName") String jobName,
+        @QueryParam("intervalSeconds") @DefaultValue("5") long intervalSeconds,
+        @QueryParam("timeoutSeconds") Long timeoutSeconds
+    ) {
+        return jobControlService.startAndWait(namespace, jobName, intervalSeconds, timeoutSeconds);
     }
 
     @POST

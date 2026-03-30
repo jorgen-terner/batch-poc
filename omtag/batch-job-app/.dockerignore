@@ -1,0 +1,57 @@
+# Build outputs (except the built artifacts we need)
+.gradle/
+.gradle
+build/build/
+build/tmp/
+build/classes/
+build/generated/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation and examples
+README.md
+*.md
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Kubernetes manifests (we deploy separately)
+k8s/
+*.yaml
+*.yml
+
+# Test files
+src/test/
+**/*test*/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Gradle files (wrapper not needed in image)
+gradle/
+gradlew
+gradlew.bat
+gradle.properties
+
+# Docker and deployment files themselves
+Dockerfile
+.dockerignore
+docker-compose.yml
+setup-openshift.sh
+
+# Other artifacts
+*.jar.original
+*.log

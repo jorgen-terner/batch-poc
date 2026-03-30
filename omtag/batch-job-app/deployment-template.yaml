@@ -1,0 +1,130 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: batch-job-app
+  annotations:
+    description: "Deployment template för batch-job-app - REST API för att styra suspended Kubernetes Jobs"
+    tags: "batch,jobs,quarkus,kubernetes"
+parameters:
+- name: NAMESPACE
+  description: "Target namespace"
+  required: true
+  value: batch-jobs
+- name: IMAGE_REGISTRY
+  description: "Image registry URL"
+  required: true
+  value: "image-registry.openshift-image-registry.svc:5000"
+- name: IMAGE_TAG
+  description: "Image tag/version"
+  required: true
+  value: latest
+- name: SERVICE_ACCOUNT_NAME
+  description: "Name of ServiceAccount created via rbac-batch-job-app.yaml"
+  required: true
+  value: duplosa
+- name: CPU_REQUEST
+  description: "CPU request"
+  required: true
+  value: "100m"
+- name: CPU_LIMIT
+  description: "CPU limit"
+  required: true
+  value: "500m"
+- name: MEMORY_REQUEST
+  description: "Memory request"
+  required: true
+  value: "256Mi"
+- name: MEMORY_LIMIT
+  description: "Memory limit"
+  required: true
+  value: "512Mi"
+objects:
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: batch-job-app
+      namespace: ${NAMESPACE}
+      labels:
+        app: batch-job-app
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: batch-job-app
+      strategy:
+        type: RollingUpdate
+        rollingUpdate:
+          maxUnavailable: 0
+          maxSurge: 1
+      template:
+        metadata:
+          labels:
+            app: batch-job-app
+        spec:
+          serviceAccountName: ${SERVICE_ACCOUNT_NAME}
+          containers:
+          - name: batch-job-app
+            image: ${IMAGE_REGISTRY}/${NAMESPACE}/batch-job-app:${IMAGE_TAG}
+            imagePullPolicy: Always
+            ports:
+            - containerPort: 8080
+              name: http
+            env:
+            - name: QUARKUS_HTTP_HOST
+              value: "0.0.0.0"
+            - name: QUARKUS_HTTP_PORT
+              value: "8080"
+            - name: QUARKUS_LOG_LEVEL
+              value: "INFO"
+            livenessProbe:
+              httpGet:
+                path: /q/health/live
+                port: 8080
+              initialDelaySeconds: 10
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 3
+            readinessProbe:
+              httpGet:
+                path: /q/health/ready
+                port: 8080
+              initialDelaySeconds: 5
+              periodSeconds: 5
+              timeoutSeconds: 3
+              failureThreshold: 2
+            resources:
+              requests:
+                memory: ${MEMORY_REQUEST}
+                cpu: ${CPU_REQUEST}
+              limits:
+                memory: ${MEMORY_LIMIT}
+                cpu: ${CPU_LIMIT}
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: batch-job-app
+      namespace: ${NAMESPACE}
+      labels:
+        app: batch-job-app
+    spec:
+      selector:
+        app: batch-job-app
+      ports:
+      - port: 8080
+        targetPort: 8080
+        name: http
+      type: ClusterIP
+  - apiVersion: route.openshift.io/v1
+    kind: Route
+    metadata:
+      name: batch-job-app
+      namespace: ${NAMESPACE}
+    spec:
+      to:
+        kind: Service
+        name: batch-job-app
+      port:
+        targetPort: http
+      tls:
+        termination: edge
+        insecureEdgeTerminationPolicy: Allow
