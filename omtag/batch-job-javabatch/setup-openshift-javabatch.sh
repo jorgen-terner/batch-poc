@@ -10,6 +10,10 @@ SPRINGBATCH_CONFIG_FILE="${4:-springbatch_job.ini}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+escape_sed_replacement() {
+  printf '%s' "$1" | sed -e 's/[\\&]/\\&/g'
+}
+
 if [ ! -f "${SCRIPT_DIR}/${SPRINGBATCH_CONFIG_FILE}" ]; then
   printf 'Missing config file: %s\n' "${SCRIPT_DIR}/${SPRINGBATCH_CONFIG_FILE}" >&2
   exit 1
@@ -24,12 +28,18 @@ oc -n "$NAMESPACE" create configmap javabatch-job-scripts \
   --from-file=springbatch_job.ini="${SCRIPT_DIR}/${SPRINGBATCH_CONFIG_FILE}" \
   --dry-run=client -o yaml | oc apply -f -
 
-sed "s/__JOB_NAME__/${JOB_NAME}/g" "${SCRIPT_DIR}/suspended-job-openshift.yaml" | oc -n "$NAMESPACE" apply -f -
+if oc -n "$NAMESPACE" get job "$JOB_NAME" >/dev/null 2>&1; then
+  printf 'Replacing existing job %s in namespace %s\n' "$JOB_NAME" "$NAMESPACE"
+  oc -n "$NAMESPACE" delete job "$JOB_NAME" --wait=true
+fi
 
-oc -n "$NAMESPACE" set env job/"$JOB_NAME" \
-  JOB_NAMESPACE="$NAMESPACE" \
-  JOB_NAME="$JOB_NAME" \
-  BATCH_APP_BASE_URL="$BATCH_APP_SERVICE_URL"
+JOB_NAME_ESCAPED="$(escape_sed_replacement "$JOB_NAME")"
+BATCH_APP_SERVICE_URL_ESCAPED="$(escape_sed_replacement "$BATCH_APP_SERVICE_URL")"
+
+sed \
+  -e "s/__JOB_NAME__/${JOB_NAME_ESCAPED}/g" \
+  -e "s|__BATCH_APP_BASE_URL__|${BATCH_APP_SERVICE_URL_ESCAPED}|g" \
+  "${SCRIPT_DIR}/suspended-job-openshift.yaml" | oc -n "$NAMESPACE" apply -f -
 
 printf 'Created suspended javabatch job %s in namespace %s\n' "$JOB_NAME" "$NAMESPACE"
 printf 'Start with: ./batch-job-control.sh start %s %s <batch-job-app-url>\n' "$NAMESPACE" "$JOB_NAME"

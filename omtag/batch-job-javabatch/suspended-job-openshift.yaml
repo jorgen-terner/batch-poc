@@ -42,7 +42,7 @@ spec:
             - name: FKST_TOKEN
               value: ""
             - name: BATCH_APP_BASE_URL
-              value: http://batch-job-app.default.svc.cluster.local:8080
+              value: __BATCH_APP_BASE_URL__
             - name: REPORT_INTERVAL_SECONDS
               value: "10"
             - name: ENABLE_PROGRESS_REPORT

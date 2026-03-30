@@ -9,7 +9,7 @@ Denna mapp innehaller anpassning for att kora befintliga javabatch-skript i mode
 - javabatch_worker.sh: Container-entrypoint som kor springbatch_v2.py i Kubernetes Job och rapporterar minimal status till batch-job-app.
 - springbatch_job.ini: Endpoint-konfiguration for springbatch_v2.py.
 - suspended-job-openshift.yaml: Suspended Job-definition (`spec.suspend=true`) for OpenShift/Kubernetes.
-- setup-openshift-javabatch.sh: Skapar ConfigMap fran skriptfilerna och applicerar Job.
+- setup-openshift-javabatch.sh: Skapar ConfigMap fran skriptfilerna och ater-skapar Job med korrekta miljo-variabler direkt i manifestet.
 - batch-job-control.sh: Klient mot batch-job-app API (start/stop/restart/status/metrics).
 
 ## Granssnitt mot batch-job-app
