@@ -20,10 +20,6 @@ spec:
             - -c
             - |
               set -euo pipefail
-              mkdir -p /openprocess/scripts/rfvop/jbatch
-              cp /opt/jbatch/monitor_jbatch.sh /openprocess/scripts/rfvop/jbatch/monitor_jbatch.sh
-              chmod +x /openprocess/scripts/rfvop/jbatch/monitor_jbatch.sh
-              chmod +x /opt/jbatch/*.sh
               exec /opt/jbatch/javabatch_worker.sh
           env:
             - name: JOB_NAMESPACE
@@ -44,6 +40,8 @@ spec:
               value: "10"
             - name: ENABLE_PROGRESS_REPORT
               value: "false"
+            - name: MONITOR_SCRIPT_PATH
+              value: /opt/jbatch/monitor_jbatch.sh
           volumeMounts:
             - name: jbatch-scripts
               mountPath: /opt/jbatch

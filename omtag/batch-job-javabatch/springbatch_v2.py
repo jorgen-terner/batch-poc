@@ -38,6 +38,7 @@ except ImportError:
     requests = _RequestsCompat()
 
 print = functools.partial(print, flush=True)
+MONITOR_SCRIPT_PATH = os.getenv('MONITOR_SCRIPT_PATH', '/opt/jbatch/monitor_jbatch.sh')
 #
 #Viktigt: Glöm inte att meddela AppDrift om förändringer sker i detta skript. De lyfter in skriptet manuellt under en övergångsperiod
 #
@@ -144,8 +145,8 @@ def start_job(pathrun, pathstatus, pathsummary, jobargs, token):
         print("executionId: " + exec_id.decode('ascii'))
         try:
             subprocess.call(['/openprocess/Automator/PServer/bin/opscmd', 'resval', '-res', 'executionId', '-value', exec_id.decode('ascii')])
-        except subprocess.CalledProcessError as e:
-            print(e.output)
+        except (subprocess.CalledProcessError, OSError) as e:
+            print(getattr(e, 'output', str(e)))
             print("OP chart parameter executionId not updated, continuing")
         start_job_status(exec_id, pathstatus, pathsummary, token)
     else:
@@ -294,8 +295,8 @@ def main(argv):
         sys.exit(1)
 
 def prepare_and_run_monitor_script(method):
-    if os.path.exists("/openprocess/scripts/rfvop/jbatch//monitor_jbatch.sh"):
-        call_monitor('/openprocess/scripts/rfvop/jbatch/monitor_jbatch.sh', method)
+    if os.path.exists(MONITOR_SCRIPT_PATH):
+        call_monitor(MONITOR_SCRIPT_PATH, method)
     else:
         print("Monitor script hittades inte, fortsätter...")
 
@@ -303,8 +304,8 @@ def prepare_and_run_monitor_script(method):
 def call_monitor(script_path, method):
     try:
         subprocess.call([script_path, method, str(os.getpid())])
-    except subprocess.CalledProcessError as e:
-        print(e.output)
+    except (subprocess.CalledProcessError, OSError) as e:
+        print(getattr(e, 'output', str(e)))
         print("Monitor_jbatch did not return 0, continuing")
 
 def sig_handler(signal, handler):
