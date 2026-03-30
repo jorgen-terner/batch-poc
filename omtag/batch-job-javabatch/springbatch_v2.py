@@ -40,6 +40,14 @@ except ImportError:
 print = functools.partial(print, flush=True)
 MONITOR_SCRIPT_PATH = os.getenv('MONITOR_SCRIPT_PATH', '/opt/jbatch/monitor_jbatch.sh')
 LEGACY_MONITOR_ENABLED = os.getenv('LEGACY_MONITOR_ENABLED', 'false').lower() == 'true'
+
+def join_url(base_url, suffix):
+    if suffix is None:
+        return base_url.rstrip('/')
+    suffix_value = str(suffix).strip()
+    if suffix_value == '':
+        return base_url.rstrip('/')
+    return "{}/{}".format(base_url.rstrip('/'), suffix_value)
 #
 #Viktigt: Glöm inte att meddela AppDrift om förändringer sker i detta skript. De lyfter in skriptet manuellt under en övergångsperiod
 #
@@ -57,7 +65,7 @@ def help_text():
     print('--summary')
 
 def start_job_status(execId, pathstatus, pathsummary, token):
-    url = "{}/{}".format(pathstatus, execId.decode('ascii'))
+    url = join_url(pathstatus, execId.decode('ascii'))
 
     done = False
     fault = 0
@@ -107,7 +115,7 @@ def start_job_status(execId, pathstatus, pathsummary, token):
 
 
 def job_status(exec_id, pathstatus, token):
-    url = "{}/{}".format(pathstatus, exec_id)
+    url = join_url(pathstatus, exec_id)
 
     url.rstrip()
     print(url)
@@ -120,7 +128,7 @@ def job_status(exec_id, pathstatus, token):
     return 0
 
 def summary_job(exec_id, pathsummary, token):
-    url = "{}/{}".format(pathsummary, str(exec_id))
+    url = join_url(pathsummary, str(exec_id))
 
     url.rstrip()
     print(url)
@@ -134,7 +142,7 @@ def summary_job(exec_id, pathsummary, token):
 
 
 def start_job(pathrun, pathstatus, pathsummary, jobargs, token):
-    url = "{}/{}".format(pathrun, jobargs)
+    url = join_url(pathrun, jobargs)
     url.rstrip()
     print(url)
 
@@ -157,7 +165,7 @@ def start_job(pathrun, pathstatus, pathsummary, jobargs, token):
 
 
 def stop_job(pathstop, jobargs, token):
-    url = "{}/{}".format(pathstop, jobargs)
+    url = join_url(pathstop, jobargs)
     url.rstrip()
     print(url)
 
@@ -175,7 +183,7 @@ def stop_job(pathstop, jobargs, token):
 
 
 def restart_job(pathrestart, jobargs, pathstatus, pathsummary, token):
-    url = "{}/{}".format(pathrestart, jobargs)
+    url = join_url(pathrestart, jobargs)
     url.rstrip()
     print(url)
 

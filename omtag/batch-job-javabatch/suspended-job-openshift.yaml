@@ -31,7 +31,7 @@ spec:
             - name: JOB_CONFIG
               value: /opt/jbatch/springbatch_job.ini
             - name: JOB_ARGS
-              value: defaultJob
+              value: ""
             - name: FKST_TOKEN
               value: ""
             - name: BATCH_APP_BASE_URL
