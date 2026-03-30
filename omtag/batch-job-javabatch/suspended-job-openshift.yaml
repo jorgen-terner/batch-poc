@@ -20,7 +20,7 @@ spec:
             - -c
             - |
               set -euo pipefail
-              exec /opt/jbatch/javabatch_worker.sh
+              exec /bin/bash /opt/jbatch/javabatch_worker.sh
           env:
             - name: JOB_NAMESPACE
               valueFrom:

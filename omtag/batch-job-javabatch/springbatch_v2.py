@@ -303,7 +303,7 @@ def prepare_and_run_monitor_script(method):
 
 def call_monitor(script_path, method):
     try:
-        subprocess.call([script_path, method, str(os.getpid())])
+        subprocess.call(['/bin/bash', script_path, method, str(os.getpid())])
     except (subprocess.CalledProcessError, OSError) as e:
         print(getattr(e, 'output', str(e)))
         print("Monitor_jbatch did not return 0, continuing")
