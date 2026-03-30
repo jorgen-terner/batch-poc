@@ -39,15 +39,15 @@ report() {
   local payload
   payload="$(cat <<EOF
 {
-  \"status\": \"$(json_escape "$status")\",
-  \"metrics\": {
-    \"errorCount\": ${error_count}.0,
-    \"elapsedSeconds\": ${elapsed}.0
+  "status": "$(json_escape "$status")",
+  "metrics": {
+    "errorCount": ${error_count}.0,
+    "elapsedSeconds": ${elapsed}.0
   },
-  \"attributes\": {
-    \"executionId\": \"$(json_escape "$EXECUTION_ID")\",
-    \"jobArgs\": \"$(json_escape "$JOB_ARGS")\",
-    \"message\": \"$(json_escape "$message")\"
+  "attributes": {
+    "executionId": "$(json_escape "$EXECUTION_ID")",
+    "jobArgs": "$(json_escape "$JOB_ARGS")",
+    "message": "$(json_escape "$message")"
   }
 }
 EOF
