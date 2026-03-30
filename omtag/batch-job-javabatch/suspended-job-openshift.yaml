@@ -40,6 +40,8 @@ spec:
               value: "10"
             - name: ENABLE_PROGRESS_REPORT
               value: "false"
+            - name: LEGACY_MONITOR_ENABLED
+              value: "false"
             - name: MONITOR_SCRIPT_PATH
               value: /opt/jbatch/monitor_jbatch.sh
           volumeMounts:

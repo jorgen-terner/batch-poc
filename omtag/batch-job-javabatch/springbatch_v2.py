@@ -39,6 +39,7 @@ except ImportError:
 
 print = functools.partial(print, flush=True)
 MONITOR_SCRIPT_PATH = os.getenv('MONITOR_SCRIPT_PATH', '/opt/jbatch/monitor_jbatch.sh')
+LEGACY_MONITOR_ENABLED = os.getenv('LEGACY_MONITOR_ENABLED', 'false').lower() == 'true'
 #
 #Viktigt: Glöm inte att meddela AppDrift om förändringer sker i detta skript. De lyfter in skriptet manuellt under en övergångsperiod
 #
@@ -295,6 +296,9 @@ def main(argv):
         sys.exit(1)
 
 def prepare_and_run_monitor_script(method):
+    if not LEGACY_MONITOR_ENABLED:
+        return
+
     if os.path.exists(MONITOR_SCRIPT_PATH):
         call_monitor(MONITOR_SCRIPT_PATH, method)
     else:
