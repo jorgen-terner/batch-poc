@@ -7,31 +7,33 @@ metadata:
     app: inf-batch-javabatch
     version: "1.0"
 data:
-  # Job config som lases av inf-batch-job
-  image: "image-registry.openshift-image-registry.svc:5000/dev252/inf-batch-javabatch:latest"
+  # Job configuration consumed by inf-batch-job
+  image: "image-registry.openshift-image-registry.svc:5000/dev252/inf-javabatch-app:latest"
   imagePullPolicy: "Always"
-  jobName: "javabatch"
+  jobName: "inf-javabatch-app"
   parallelism: "1"
   completions: "1"
   ttlSecondsAfterFinished: "3600"
   backoffLimit: "0"
 
-  # Typstyrning for rapportering i inf-batch-job
-  BATCH_TYP: "JAVABATCH"
+  # inf-batch-job sets container.command, so the full launch command lives here.
+  # The command reads runtime values from env vars injected from this same ConfigMap.
+  command: "/bin/sh,-c,exec java ${JAVA_OPTS:-} -jar /deployments/inf-javabatch-app.jar --${JOB_ACTION:-start} -a \"${JOB_ARGS:-}\" -t \"${FKST:-}\""
 
-  # Parametrar till javabatch-script image
-  JOB_ACTION: "restart"
-  JOB_ARGS: "myJob=true"
-  FKST_TOKEN: ""
+  # Runtime metadata consumed by inf-javabatch-app
+  TO_JOB_NAME: "inf-batch-javabatch"
+  TO_ENV_NAME: "MANUELL"
+  JAVA_OPTS: "-Djava.util.logging.manager=org.jboss.logmanager.LogManager -Duser.language=sv -Duser.country=SE"
 
-  # Endpoints som entrypoint.sh mappar till ini-fil
-  SPRINGBATCH_V2_START: "https://replace.example/api/start"
-  SPRINGBATCH_V2_STATUS: "https://replace.example/api/status"
-  SPRINGBATCH_V2_STOP: "https://replace.example/api/stop"
-  SPRINGBATCH_V2_RESTART: "https://replace.example/api/restart"
-  SPRINGBATCH_V2_SUMMARY: "https://replace.example/api/summary"
-  SPRINGBATCH_V2_HELP: "https://replace.example/api/help"
+  # Endpoint configuration read by inf-javabatch-app
+  JAVABATCH_START: "http://springbatch-api.example.svc.cluster.local/v2/start"
+  JAVABATCH_STATUS: "http://springbatch-api.example.svc.cluster.local/v2/status"
+  JAVABATCH_STOP: "http://springbatch-api.example.svc.cluster.local/v2/stop"
+  JAVABATCH_RESTART: "http://springbatch-api.example.svc.cluster.local/v2/restart"
+  JAVABATCH_SUMMARY: "http://springbatch-api.example.svc.cluster.local/v2/summary"
+  JAVABATCH_HELP: "http://springbatch-api.example.svc.cluster.local/v2/help"
 
-  # Falt som anvands i metrics-rapportering
-  TO_JOB_NAME: "JAVABATCH_SAMPLE"
-  TO_ENV_NAME: "BATCH-POC"
+  # Runtime defaults (can be overridden from API request.env)
+  JOB_ACTION: "start"
+  JOB_ARGS: ""
+  FKST: ""

@@ -10,6 +10,53 @@ inf-batch-job kan nu referera till ConfigMaps som skapats av batch-applikationer
 ## Arkitektur
 
 ```
+
+För fler varianter av samma flöde, se [batch-poc/BATCH-FLOW-DIAGRAM.md](batch-poc/BATCH-FLOW-DIAGRAM.md).
+
+### Arkitekturreview med ansvarsfördelning
+
+Det här diagrammet visar ansvarsfördelningen mellan `inf-batch-job`, plattformen och själva batch-imagen.
+
+```mermaid
+flowchart LR
+  caller[Anropare] -->|jobName\nconfigMapName\nrequest-overrides| ibj
+
+  subgraph orchestrator[Ansvar: inf-batch-job]
+    ibj[inf-batch-job]
+    readcm[Läser ConfigMap och tolkar job-config]
+    buildjob[Bygger Kubernetes Job-spec]
+    monitor[Initierar monitorering\nvid behov]
+  end
+
+  subgraph platform[Ansvar: Kubernetes eller OpenShift]
+    cm[(ConfigMap)]
+    job[[Kubernetes Job]]
+    pod[(Job Pod)]
+  end
+
+  subgraph app[Ansvar: batch-image]
+    image[Vald image\nexempel: inf-javabatch\neller annan batch-image]
+    appcfg[Läser runtime-parametrar\nfrån miljövariabler]
+    execute[Kör batchlogik]
+    report[Rapporterar status eller resultat\nenligt batchtyp]
+  end
+
+  ibj --> readcm
+  readcm -->|hämtar configMapData| cm
+  cm -->|image, command, BATCH_TYP,\nruntime-parametrar| readcm
+  readcm --> buildjob
+  buildjob -->|skapar Job med image, command,\nlabels, envFrom och overrides| job
+  job --> pod
+  pod -->|startar vald image| image
+
+  cm -->|samma ConfigMap exponeras\ntill podden| pod
+  image --> appcfg
+  appcfg --> execute
+  execute --> report
+
+  ibj --> monitor
+  monitor -. observerar Job och status .-> job
+```
 ┌──────────────────────┐
 │ inf-batch-testapp1   │
 ├──────────────────────┤
@@ -73,7 +120,7 @@ ConfigMap-värden laddas först, sedan överskrids av `env`-parametrar vid namnk
 
 Lagg till `BATCH_TYP` i ConfigMap for att styra hur inf-batch-job rapporterar statistik/status.
 
-- `BATCH_TYP=JAVABATCH`: rapportering sker enligt samma modell som i `example_monitor.py`.
+- `BATCH_TYP=JAVABATCH`: rapportering sker enligt samma modell som i `monitor_jbatch`-scriptet (tidigare `monitor.py`).
 - Andra typer eller tomt varde: ingen rapportering just nu.
 
 Exempel:
@@ -103,16 +150,17 @@ Detta gor att batch-poc skapar ett separat Kubernetes Job-objekt for script-imag
 
 ## RBAC Krav
 
-inf-batch-job behöver **INTE** läsbehörighet till ConfigMaps för att starta Jobs, eftersom:
+inf-batch-job behöver läsbehörighet till `ConfigMaps` i den nuvarande implementationen, eftersom:
 
-1. **Kubernetes Job läser ConfigMap vid runtime** - inte inf-batch-job
-2. **Job Pod's ServiceAccount behöver rättigheter** - inte inf-batch-job's ServiceAccount
+1. **inf-batch-job läser ConfigMap vid jobbstart** för att bygga `Job`-specen
+2. **Kubernetes Job läser samma ConfigMap vid runtime** via `envFrom`
+3. **Både inf-batch-job och Job Podens ServiceAccount behöver därför rättigheter**
 
 ### Rekommenderad RBAC Setup
 
 #### För inf-batch-job (ServiceAccount: inf-batch-job)
 
-Behöver ENDAST rättigheter att skapa/lista/ta bort Jobs:
+Behöver rättigheter att skapa och läsa `Jobs`, samt läsa `ConfigMaps`:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -125,6 +173,9 @@ rules:
   resources: ["jobs"]
   verbs: ["create", "get", "list", "delete"]
 - apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
   resources: ["pods"]
   verbs: ["get", "list"]
 - apiGroups: [""]
@@ -134,7 +185,7 @@ rules:
 
 #### För Batch Jobs (ServiceAccount: default eller custom)
 
-Jobs som startas behöver läsrättigheter till ConfigMaps:
+Jobs som startas behöver också läsrättigheter till `ConfigMaps`, eftersom batch-containern läser samma värden vid runtime:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1

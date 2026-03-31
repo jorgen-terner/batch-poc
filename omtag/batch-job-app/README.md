@@ -1,4 +1,4 @@
-# batch-job-app
+# op-proxy-app
 
 Java 21-applikation for att styra forskapade Kubernetes Jobs (suspended Jobs) via REST API.
 
@@ -94,8 +94,8 @@ Scriptet gör följande:
 1. Bygger appen lokalt (`./gradlew build`)
 2. Skapar namespace (om det inte finns)
 3. Bygger Docker-imagen via OpenShift BuildConfig
-4. Applicerar ServiceAccount och RBAC från `rbac-batch-job-app.yaml`
-5. Deployar batch-job-app med Service och Route
+4. Applicerar ServiceAccount och RBAC från `rbac-op-proxy-app.yaml`
+5. Deployar op-proxy-app med Service och Route
 
 ### Manuell deploy
 
@@ -114,19 +114,19 @@ NAMESPACE="batch-jobs"
 IMAGE_TAG="latest"
 
 # Bygg imagen
-docker build -t ${REGISTRY}/${NAMESPACE}/batch-job-app:${IMAGE_TAG} .
+docker build -t ${REGISTRY}/${NAMESPACE}/op-proxy-app:${IMAGE_TAG} .
 
 # Logga in i OpenShift registry (om behövs)
 docker login -u $(oc whoami) -p $(oc whoami -t) ${REGISTRY}
 
 # Pusha imagen
-docker push ${REGISTRY}/${NAMESPACE}/batch-job-app:${IMAGE_TAG}
+docker push ${REGISTRY}/${NAMESPACE}/op-proxy-app:${IMAGE_TAG}
 ```
 
 **3. Applicera RBAC (ServiceAccount + Role + RoleBinding):**
 
 ```bash
-oc -n batch-jobs apply -f rbac-batch-job-app.yaml
+oc -n batch-jobs apply -f rbac-op-proxy-app.yaml
 ```
 
 **4. Deploy via template:**
@@ -142,13 +142,13 @@ oc process -f deployment-template.yaml \
 
 ### RBAC-rättigheter som behövs
 
-batch-job-app behöver namespaced RBAC för att kunna styra suspended Jobs:
+op-proxy-app behöver namespaced RBAC för att kunna styra suspended Jobs:
 
 - `batch/jobs`: `get`, `list`, `watch`, `create`, `update`, `patch`, `delete`
 - `core/pods`: `get`, `list`, `watch`
 - `core/pods/log`: `get`, `list`, `watch`
 
-RBAC är utbrutet i separat fil: `rbac-batch-job-app.yaml`.
+RBAC är utbrutet i separat fil: `rbac-op-proxy-app.yaml`.
 
 ### Verifiera deployment
 
@@ -157,13 +157,13 @@ RBAC är utbrutet i separat fil: `rbac-batch-job-app.yaml`.
 oc -n batch-jobs get deployment,pods
 
 # Visa logs
-oc -n batch-jobs logs -l app=batch-job-app -f
+oc -n batch-jobs logs -l app=op-proxy-app -f
 
 # Få API-endpoint
-oc -n batch-jobs get route batch-job-app -o jsonpath='{.spec.host}'
+oc -n batch-jobs get route op-proxy-app -o jsonpath='{.spec.host}'
 
 # Test hälsostatus
-curl https://$(oc -n batch-jobs get route batch-job-app -o jsonpath='{.spec.host}')/q/health/ready
+curl https://$(oc -n batch-jobs get route op-proxy-app -o jsonpath='{.spec.host}')/q/health/ready
 ```
 
 ### Använda deploy-mallen manuellt
@@ -179,7 +179,7 @@ oc process -f deployment-template.yaml \
   -p MEMORY_LIMIT=1Gi | oc apply -f -
 
 # Skala upp vid behov
-oc -n production scale deployment/batch-job-app --replicas=2
+oc -n production scale deployment/op-proxy-app --replicas=2
 ```
 
 **Tillgängliga parametrar:**

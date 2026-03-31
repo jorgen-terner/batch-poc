@@ -1,7 +1,7 @@
-package com.batchjobapp.store;
+package infrastruktur.batch.store;
 
-import com.batchjobapp.model.JobReportRequest;
-import com.batchjobapp.model.JobReportSnapshot;
+import infrastruktur.batch.model.JobReportRequest;
+import infrastruktur.batch.model.JobReportSnapshot;
 
 import java.time.Instant;
 import java.util.Map;

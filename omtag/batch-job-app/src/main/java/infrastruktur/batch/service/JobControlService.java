@@ -1,11 +1,11 @@
-package com.batchjobapp.service;
+package infrastruktur.batch.service;
 
-import com.batchjobapp.model.ActionResponse;
-import com.batchjobapp.model.JobMetricsResponse;
-import com.batchjobapp.model.JobReportRequest;
-import com.batchjobapp.model.JobReportSnapshot;
-import com.batchjobapp.model.JobStatusResponse;
-import com.batchjobapp.store.JobReportStore;
+import infrastruktur.batch.model.ActionResponse;
+import infrastruktur.batch.model.JobMetricsResponse;
+import infrastruktur.batch.model.JobReportRequest;
+import infrastruktur.batch.model.JobReportSnapshot;
+import infrastruktur.batch.model.JobStatusResponse;
+import infrastruktur.batch.store.JobReportStore;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;

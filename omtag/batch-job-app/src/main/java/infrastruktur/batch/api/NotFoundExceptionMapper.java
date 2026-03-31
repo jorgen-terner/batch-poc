@@ -1,4 +1,4 @@
-package com.batchjobapp.api;
+package infrastruktur.batch.api;
 
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;

@@ -1,4 +1,4 @@
-package com.batchjobapp.model;
+package infrastruktur.batch.model;
 
 import java.util.Map;
 

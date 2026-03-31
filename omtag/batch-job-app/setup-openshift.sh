@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Builds batch-job-app locally and deploys it to OpenShift.
+# Builds op-proxy-app locally and deploys it to OpenShift.
 # Usage: ./setup-openshift.sh [NAMESPACE] [IMAGE_TAG]
 # Example: ./setup-openshift.sh batch-jobs v0.1.0
 
@@ -12,13 +12,13 @@ fi
 
 NAMESPACE="${1:-batch-jobs}"
 IMAGE_TAG="${2:-latest}"
-IMAGE_NAME="batch-job-app"
+IMAGE_NAME="op-proxy-app"
 SERVICE_ACCOUNT="duplosa"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=========================================="
-echo "Building batch-job-app locally..."
+echo "Building op-proxy-app locally..."
 echo "=========================================="
 cd "$SCRIPT_DIR"
 ./gradlew clean build -DskipTests
@@ -58,11 +58,11 @@ echo "Applying service account and RBAC..."
 echo "=========================================="
 
 # Apply predefined RBAC manifest
-oc -n "$NAMESPACE" apply -f "$SCRIPT_DIR/rbac-batch-job-app.yaml"
+oc -n "$NAMESPACE" apply -f "$SCRIPT_DIR/rbac-op-proxy-app.yaml"
 
 echo ""
 echo "=========================================="
-echo "Deploying batch-job-app..."
+echo "Deploying op-proxy-app..."
 echo "=========================================="
 
 # Create Deployment manifest
@@ -70,23 +70,23 @@ cat > /tmp/batch-job-deployment.yaml <<EOF
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: batch-job-app
+  name: op-proxy-app
   namespace: $NAMESPACE
   labels:
-    app: batch-job-app
+    app: op-proxy-app
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: batch-job-app
+      app: op-proxy-app
   template:
     metadata:
       labels:
-        app: batch-job-app
+        app: op-proxy-app
     spec:
       serviceAccountName: $SERVICE_ACCOUNT
       containers:
-      - name: batch-job-app
+      - name: op-proxy-app
         image: ${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}:${IMAGE_TAG}
         imagePullPolicy: Always
         ports:
@@ -120,11 +120,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: batch-job-app
+  name: op-proxy-app
   namespace: $NAMESPACE
 spec:
   selector:
-    app: batch-job-app
+    app: op-proxy-app
   ports:
   - port: 8080
     targetPort: 8080
@@ -134,12 +134,12 @@ spec:
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: batch-job-app
+  name: op-proxy-app
   namespace: $NAMESPACE
 spec:
   to:
     kind: Service
-    name: batch-job-app
+    name: op-proxy-app
   port:
     targetPort: http
   tls:
@@ -158,9 +158,9 @@ echo "namespace: $NAMESPACE"
 echo "image: $IMAGE"
 echo ""
 
-ROUTE=$(oc -n "$NAMESPACE" get route batch-job-app -o jsonpath='{.spec.host}' 2>/dev/null || echo "pending")
+ROUTE=$(oc -n "$NAMESPACE" get route op-proxy-app -o jsonpath='{.spec.host}' 2>/dev/null || echo "pending")
 echo "API endpoint: https://${ROUTE}"
 echo ""
 echo "Check status: oc -n $NAMESPACE get deployment,pods"
-echo "View logs: oc -n $NAMESPACE logs -l app=batch-job-app -f"
+echo "View logs: oc -n $NAMESPACE logs -l app=op-proxy-app -f"
 echo ""

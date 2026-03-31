@@ -1,9 +1,9 @@
 apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
-  name: batch-job-app
+  name: op-proxy-app
   annotations:
-    description: "Deployment template för batch-job-app - REST API för att styra suspended Kubernetes Jobs"
+    description: "Deployment template för op-proxy-app - REST API för att styra suspended Kubernetes Jobs"
     tags: "batch,jobs,quarkus,kubernetes"
 parameters:
 - name: NAMESPACE
@@ -19,7 +19,7 @@ parameters:
   required: true
   value: latest
 - name: SERVICE_ACCOUNT_NAME
-  description: "Name of ServiceAccount created via rbac-batch-job-app.yaml"
+  description: "Name of ServiceAccount created via rbac-op-proxy-app.yaml"
   required: true
   value: duplosa
 - name: CPU_REQUEST
@@ -42,15 +42,15 @@ objects:
   - apiVersion: apps/v1
     kind: Deployment
     metadata:
-      name: batch-job-app
+      name: op-proxy-app
       namespace: ${NAMESPACE}
       labels:
-        app: batch-job-app
+        app: op-proxy-app
     spec:
       replicas: 1
       selector:
         matchLabels:
-          app: batch-job-app
+          app: op-proxy-app
       strategy:
         type: RollingUpdate
         rollingUpdate:
@@ -59,12 +59,12 @@ objects:
       template:
         metadata:
           labels:
-            app: batch-job-app
+            app: op-proxy-app
         spec:
           serviceAccountName: ${SERVICE_ACCOUNT_NAME}
           containers:
-          - name: batch-job-app
-            image: ${IMAGE_REGISTRY}/${NAMESPACE}/batch-job-app:${IMAGE_TAG}
+          - name: op-proxy-app
+            image: ${IMAGE_REGISTRY}/${NAMESPACE}/op-proxy-app:${IMAGE_TAG}
             imagePullPolicy: Always
             ports:
             - containerPort: 8080
@@ -102,13 +102,13 @@ objects:
   - apiVersion: v1
     kind: Service
     metadata:
-      name: batch-job-app
+      name: op-proxy-app
       namespace: ${NAMESPACE}
       labels:
-        app: batch-job-app
+        app: op-proxy-app
     spec:
       selector:
-        app: batch-job-app
+        app: op-proxy-app
       ports:
       - port: 8080
         targetPort: 8080
@@ -117,12 +117,12 @@ objects:
   - apiVersion: route.openshift.io/v1
     kind: Route
     metadata:
-      name: batch-job-app
+      name: op-proxy-app
       namespace: ${NAMESPACE}
     spec:
       to:
         kind: Service
-        name: batch-job-app
+        name: op-proxy-app
       port:
         targetPort: http
       tls:
