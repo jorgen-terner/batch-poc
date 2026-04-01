@@ -6,7 +6,6 @@ metadata:
 spec:
   suspend: true
   backoffLimit: 0
-  ttlSecondsAfterFinished: 3600
   template:
     spec:
       restartPolicy: Never

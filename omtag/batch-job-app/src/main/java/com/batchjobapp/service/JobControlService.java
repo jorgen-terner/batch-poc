@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,7 +31,6 @@ public class JobControlService {
     private final KubernetesClient client;
     private final JobReportStore reportStore;
     private final KubernetesJobGateway kubernetesJobGateway;
-    private final JobCompletionWatcher jobCompletionWatcher;
     private final JobPhaseResolver jobPhaseResolver;
     private final JobMetricsCollector jobMetricsCollector;
 
@@ -39,14 +39,12 @@ public class JobControlService {
         KubernetesClient client,
         JobReportStore reportStore,
         KubernetesJobGateway kubernetesJobGateway,
-        JobCompletionWatcher jobCompletionWatcher,
         JobPhaseResolver jobPhaseResolver,
         JobMetricsCollector jobMetricsCollector
     ) {
         this.client = client;
         this.reportStore = reportStore;
         this.kubernetesJobGateway = kubernetesJobGateway;
-        this.jobCompletionWatcher = jobCompletionWatcher;
         this.jobPhaseResolver = jobPhaseResolver;
         this.jobMetricsCollector = jobMetricsCollector;
     }
@@ -56,61 +54,58 @@ public class JobControlService {
             client,
             reportStore,
             new KubernetesJobGateway(client),
-            new JobCompletionWatcher(client, new JobPhaseResolver()),
             new JobPhaseResolver(),
             new JobMetricsCollector()
         );
     }
 
-    public ActionResponse start(String namespace, String jobName) {
+    public ActionResponse start(String namespace, String jobName, Long timeoutSeconds) {
+        validateTimeoutSeconds(timeoutSeconds);
         kubernetesJobGateway.requireJob(namespace, jobName);
+        if (timeoutSeconds != null) {
+            kubernetesJobGateway.patchActiveDeadlineSeconds(namespace, jobName, timeoutSeconds);
+        }
         kubernetesJobGateway.patchSuspend(namespace, jobName, false);
 
-        LOG.info("Started job {}/{} by unsuspending", namespace, jobName);
+        LOG.info("Started job {}/{} by unsuspending (timeoutSeconds={})", namespace, jobName, timeoutSeconds);
         return action(namespace, jobName, "start", "RUNNING", "Job unsuspended");
-    }
-
-    public JobStatusResponse startAndWait(String namespace, String jobName, long intervalSeconds, Long timeoutSeconds) {
-        if (intervalSeconds < 1) {
-            throw new IllegalArgumentException("intervalSeconds must be >= 1");
-        }
-        if (timeoutSeconds != null && timeoutSeconds < 1) {
-            throw new IllegalArgumentException("timeoutSeconds must be >= 1 when provided");
-        }
-
-        start(namespace, jobName);
-
-        JobStatusResponse immediateStatus = status(namespace, jobName);
-        if (jobPhaseResolver.isTerminalPhase(immediateStatus.phase())) {
-            return immediateStatus;
-        }
-
-        long resyncMillis = intervalSeconds * 1000;
-        jobCompletionWatcher.awaitCompletion(namespace, jobName, resyncMillis, timeoutSeconds);
-        return status(namespace, jobName);
     }
 
     public ActionResponse stop(String namespace, String jobName) {
         kubernetesJobGateway.requireJob(namespace, jobName);
         kubernetesJobGateway.patchSuspend(namespace, jobName, true);
-        int deletedPods = kubernetesJobGateway.deletePods(namespace, jobName);
+        int deletedPods = kubernetesJobGateway.deleteActivePods(namespace, jobName);
 
-        LOG.info("Stopped job {}/{} and deleted {} pod(s)", namespace, jobName, deletedPods);
+        LOG.info("Stopped job {}/{} and deleted {} active pod(s)", namespace, jobName, deletedPods);
         return action(namespace, jobName, "stop", "SUSPENDED", "Job suspended and active pods deleted: " + deletedPods);
     }
 
-    public ActionResponse restart(String namespace, String jobName) {
+    public ActionResponse restart(String namespace, String jobName, Long timeoutSeconds, boolean keepFailedPods) {
+        validateTimeoutSeconds(timeoutSeconds);
         Job existing = kubernetesJobGateway.requireJob(namespace, jobName);
         kubernetesJobGateway.patchSuspend(namespace, jobName, true);
-        int deletedPods = kubernetesJobGateway.deletePods(namespace, jobName);
+        int deletedPods = keepFailedPods
+            ? kubernetesJobGateway.deleteActivePods(namespace, jobName)
+            : kubernetesJobGateway.deletePods(namespace, jobName);
 
-        kubernetesJobGateway.deleteJob(namespace, jobName);
+        if (keepFailedPods) {
+            kubernetesJobGateway.deleteJobPreservingPods(namespace, jobName);
+        } else {
+            kubernetesJobGateway.deleteJob(namespace, jobName);
+        }
         kubernetesJobGateway.waitForDeletion(namespace, jobName, 1000, 30);
 
-        Job recreated = kubernetesJobGateway.createRestartedJob(existing);
+        Job recreated = kubernetesJobGateway.createRestartedJob(existing, timeoutSeconds);
         kubernetesJobGateway.createJob(namespace, recreated);
 
-        LOG.info("Restarted job {}/{} by delete/recreate. Deleted {} pod(s)", namespace, jobName, deletedPods);
+        LOG.info(
+            "Restarted job {}/{} by delete/recreate. Deleted {} pod(s), timeoutSeconds={}, keepFailedPods={}",
+            namespace,
+            jobName,
+            deletedPods,
+            timeoutSeconds,
+            keepFailedPods
+        );
         return action(namespace, jobName, "restart", "RUNNING", "Job recreated and started");
     }
 
@@ -148,7 +143,7 @@ public class JobControlService {
     public JobMetricsResponse metrics(String namespace, String jobName) {
         Job job = kubernetesJobGateway.requireJob(namespace, jobName);
         PodList podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
-        List<Pod> pods = podList.getItems();
+        List<Pod> pods = filterPodsForCurrentJob(job, podList.getItems());
         JobMetricsCollector.PodMetricsSummary podMetrics = jobMetricsCollector.collect(pods);
 
         JobStatus jobStatus = job.getStatus();
@@ -218,6 +213,32 @@ public class JobControlService {
         }
         Instant end = completion == null ? Instant.now() : completion;
         return Duration.between(start, end).toSeconds();
+    }
+
+    private List<Pod> filterPodsForCurrentJob(Job job, List<Pod> pods) {
+        String currentJobUid = job.getMetadata() == null ? null : job.getMetadata().getUid();
+        if (currentJobUid == null || currentJobUid.isBlank()) {
+            return pods;
+        }
+
+        List<Pod> filteredPods = new ArrayList<>();
+        for (Pod pod : pods) {
+            if (pod.getMetadata() == null || pod.getMetadata().getOwnerReferences() == null) {
+                continue;
+            }
+            boolean belongsToCurrentJob = pod.getMetadata().getOwnerReferences().stream()
+                .anyMatch(ref -> "Job".equals(ref.getKind()) && currentJobUid.equals(ref.getUid()));
+            if (belongsToCurrentJob) {
+                filteredPods.add(pod);
+            }
+        }
+        return filteredPods;
+    }
+
+    private void validateTimeoutSeconds(Long timeoutSeconds) {
+        if (timeoutSeconds != null && timeoutSeconds < 1) {
+            throw new IllegalArgumentException("timeoutSeconds must be >= 1 when provided");
+        }
     }
 
 }

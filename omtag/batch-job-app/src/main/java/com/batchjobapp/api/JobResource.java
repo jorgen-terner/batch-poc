@@ -37,13 +37,12 @@ public class JobResource {
 
     @POST
     @Path("api/v1/jobs/{namespace}/{jobName}/start")
-    public JobStatusResponse start(
+    public ActionResponse start(
         @PathParam("namespace") String namespace,
         @PathParam("jobName") String jobName,
-        @QueryParam("intervalSeconds") @DefaultValue("5") long intervalSeconds,
         @QueryParam("timeoutSeconds") Long timeoutSeconds
     ) {
-        return jobControlService.startAndWait(namespace, jobName, intervalSeconds, timeoutSeconds);
+        return jobControlService.start(namespace, jobName, timeoutSeconds);
     }
 
     @POST
@@ -54,8 +53,13 @@ public class JobResource {
 
     @POST
     @Path("api/v1/jobs/{namespace}/{jobName}/restart")
-    public ActionResponse restart(@PathParam("namespace") String namespace, @PathParam("jobName") String jobName) {
-        return jobControlService.restart(namespace, jobName);
+    public ActionResponse restart(
+        @PathParam("namespace") String namespace,
+        @PathParam("jobName") String jobName,
+        @QueryParam("timeoutSeconds") Long timeoutSeconds,
+        @QueryParam("keepFailedPods") @DefaultValue("true") boolean keepFailedPods
+    ) {
+        return jobControlService.restart(namespace, jobName, timeoutSeconds, keepFailedPods);
     }
 
     @GET

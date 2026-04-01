@@ -85,9 +85,12 @@ public final class BatchJobCli implements Runnable {
         @Parameters(index = "0", description = "Job name")
         private String jobName;
 
+        @Option(names = {"--timeout-seconds"}, description = "Optional max runtime (activeDeadlineSeconds)")
+        private Long timeoutSeconds;
+
         @Override
         public Integer call() {
-            ActionResponse response = parent.service().start(parent.namespace, jobName);
+            ActionResponse response = parent.service().start(parent.namespace, jobName, timeoutSeconds);
             parent.printJson(response);
             return parent.exitCodeFromState(response.state());
         }
@@ -117,9 +120,15 @@ public final class BatchJobCli implements Runnable {
         @Parameters(index = "0", description = "Job name")
         private String jobName;
 
+        @Option(names = {"--timeout-seconds"}, description = "Optional max runtime (activeDeadlineSeconds)")
+        private Long timeoutSeconds;
+
+        @Option(names = {"--keep-failed-pods"}, defaultValue = "true", description = "Keep failed/succeeded pods for troubleshooting")
+        private boolean keepFailedPods;
+
         @Override
         public Integer call() {
-            ActionResponse response = parent.service().restart(parent.namespace, jobName);
+            ActionResponse response = parent.service().restart(parent.namespace, jobName, timeoutSeconds, keepFailedPods);
             parent.printJson(response);
             return parent.exitCodeFromState(response.state());
         }

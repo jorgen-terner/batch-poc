@@ -193,20 +193,42 @@ oc -n production scale deployment/batch-job-app --replicas=2
 
 ## Endpoints
 
-- `POST /api/v1/jobs/{namespace}/{jobName}/start` (synkront; väntar till terminal status)
+- `POST /api/v1/jobs/{namespace}/{jobName}/start` (asynkront)
 - `POST /api/v1/jobs/{namespace}/{jobName}/stop`
 - `POST /api/v1/jobs/{namespace}/{jobName}/restart`
 - `GET /api/v1/jobs/{namespace}/{jobName}/status`
 - `GET /api/v1/jobs/{namespace}/{jobName}/metrics`
 - `POST /api/v1/jobs/{namespace}/{jobName}/report`
 
-### Synkront start-anrop
+### Asynkront start-anrop
 
-`start` unsuspendar Jobbet och pollar sedan status tills `SUCCEEDED` eller `FAILED`.
+`start` unsuspendar Jobbet och returnerar direkt.
+Anropa `status` for att folja korningen tills `SUCCEEDED` eller `FAILED`.
 
 Query-parametrar:
-- `intervalSeconds` (default `5`) - pollingintervall
-- `timeoutSeconds` (valfri) - timeout for att avbryta väntan
+- `timeoutSeconds` (valfri) - sattes som `spec.activeDeadlineSeconds` pa Jobbet
+
+`restart` accepterar ocksa:
+- `timeoutSeconds` (valfri) - tillampas pa det nyskapade Jobbet som `spec.activeDeadlineSeconds`
+- `keepFailedPods` (default `true`) - om `true` behalls terminala pods (`Failed`/`Succeeded`) for felsokning
+
+### Exempel anrop
+
+```bash
+# Starta asynkront med timeout pa 15 minuter
+curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/start?timeoutSeconds=900"
+
+# Restart med timeout och behall terminala pods
+curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/restart?timeoutSeconds=900&keepFailedPods=true"
+
+# Restart och rensa alla pods
+curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/restart?keepFailedPods=false"
+```
+
+### Pods vid felsokning
+
+Vid `stop` rensas endast aktiva pods.
+Vid `restart` styr `keepFailedPods` om terminala pods (`Failed`/`Succeeded`) ska behallas (`true`) eller rensas (`false`).
 
 ### Report payload (fran Job till appen)
 
@@ -244,5 +266,5 @@ Tom report payload accepteras ocksa och returnerar `REPORTED` utan att lagra ny 
 2. Klient anropar `start`.
 3. Appen patchar Job till `suspend: false`.
 4. Jobbet skickar frivillig rapport till `report`-endpoint under korning.
-5. Klient laser `status` och `metrics`.
+5. Klient laser `status` och `metrics` tills terminal fas.
 6. Vid behov anropas `stop` eller `restart`.

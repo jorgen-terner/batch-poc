@@ -1,12 +1,15 @@
 package com.batchjobapp.service;
 
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ManagedFieldsEntry;
+import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -35,17 +38,39 @@ public class KubernetesJobGateway {
             .build());
     }
 
-    public int deletePods(String namespace, String jobName) {
+    public void patchActiveDeadlineSeconds(String namespace, String jobName, Long timeoutSeconds) {
+        client.batch().v1().jobs().inNamespace(namespace).withName(jobName).edit(j -> new JobBuilder(j)
+            .editOrNewSpec()
+            .withActiveDeadlineSeconds(timeoutSeconds)
+            .endSpec()
+            .build());
+    }
+
+    public int deleteActivePods(String namespace, String jobName) {
         var podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
-        int podCount = podList.getItems().size();
-        if (podCount > 0) {
-            client.pods().inNamespace(namespace).withLabel("job-name", jobName).delete();
+        List<String> activePodNames = new ArrayList<>();
+        for (Pod pod : podList.getItems()) {
+            String phase = pod.getStatus() == null ? null : pod.getStatus().getPhase();
+            boolean terminal = "Succeeded".equalsIgnoreCase(phase) || "Failed".equalsIgnoreCase(phase);
+            if (!terminal && pod.getMetadata() != null && pod.getMetadata().getName() != null) {
+                activePodNames.add(pod.getMetadata().getName());
+            }
         }
-        return podCount;
+
+        for (String podName : activePodNames) {
+            client.pods().inNamespace(namespace).withName(podName).delete();
+        }
+        return activePodNames.size();
     }
 
     public void deleteJob(String namespace, String jobName) {
         client.batch().v1().jobs().inNamespace(namespace).withName(jobName).delete();
+    }
+
+    public void deleteJobPreservingPods(String namespace, String jobName) {
+        client.batch().v1().jobs().inNamespace(namespace).withName(jobName)
+            .withPropagationPolicy(DeletionPropagation.ORPHAN)
+            .delete();
     }
 
     public void createJob(String namespace, Job job) {
@@ -63,7 +88,7 @@ public class KubernetesJobGateway {
         throw new IllegalStateException("Timed out waiting for Job deletion: " + namespace + "/" + jobName);
     }
 
-    public Job createRestartedJob(Job source) {
+    public Job createRestartedJob(Job source, Long timeoutSeconds) {
         String name = source.getMetadata().getName();
         String namespace = source.getMetadata().getNamespace();
 
@@ -81,6 +106,12 @@ public class KubernetesJobGateway {
             .editOrNewSpec()
             .withSuspend(false)
             .endSpec();
+
+        if (timeoutSeconds != null) {
+            builder.editOrNewSpec()
+                .withActiveDeadlineSeconds(timeoutSeconds)
+                .endSpec();
+        }
 
         return builder.build();
     }
