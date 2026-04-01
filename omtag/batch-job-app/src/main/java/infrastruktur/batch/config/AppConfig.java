@@ -1,6 +1,6 @@
-package com.batchjobapp.config;
+package infrastruktur.batch.config;
 
-import com.batchjobapp.store.JobReportStore;
+import infrastruktur.batch.store.JobReportStore;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
 import jakarta.annotation.PreDestroy;

@@ -103,7 +103,7 @@ Skapar en ny jobbkörning med samma grundkonfiguration som ursprungsjobbet (conf
 ### BATCH_TYP och statistikrapportering
 
 - Om `BATCH_TYP=JAVABATCH` i ConfigMap som anges i `configMapName`:
-  - inf-batch-job rapporterar start/stop/error till samma Influx-endpoints som i `example_monitor.py`.
+  - inf-batch-job rapporterar start/stop/error till samma Influx-endpoints som `monitor_jbatch`-scriptet (tidigare `monitor.py`).
 - Annan eller saknad `BATCH_TYP`:
   - ingen statistik rapporteras just nu (Noop).
 

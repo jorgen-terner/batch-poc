@@ -1,10 +1,10 @@
-package com.batchjobapp.api;
+package infrastruktur.batch.api;
 
-import com.batchjobapp.model.ActionResponse;
-import com.batchjobapp.model.JobMetricsResponse;
-import com.batchjobapp.model.JobReportRequest;
-import com.batchjobapp.model.JobStatusResponse;
-import com.batchjobapp.service.JobControlService;
+import infrastruktur.batch.model.ActionResponse;
+import infrastruktur.batch.model.JobMetricsResponse;
+import infrastruktur.batch.model.JobReportRequest;
+import infrastruktur.batch.model.JobStatusResponse;
+import infrastruktur.batch.service.JobControlService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;

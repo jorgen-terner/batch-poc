@@ -1,9 +1,9 @@
-package com.batchjobapp.cli;
+package infrastruktur.batch.cli;
 
-import com.batchjobapp.model.ActionResponse;
-import com.batchjobapp.model.JobStatusResponse;
-import com.batchjobapp.service.JobControlService;
-import com.batchjobapp.store.JobReportStore;
+import infrastruktur.batch.model.ActionResponse;
+import infrastruktur.batch.model.JobStatusResponse;
+import infrastruktur.batch.service.JobControlService;
+import infrastruktur.batch.store.JobReportStore;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;

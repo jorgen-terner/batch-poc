@@ -3,28 +3,18 @@ package com.example.infbatchjob.service;
 import com.example.infbatchjob.dto.JobStartRequest;
 import com.example.infbatchjob.dto.JobStatusResponse;
 import com.example.infbatchjob.exception.JobException;
-import com.example.infbatchjob.service.monitoring.BatchMetricsContext;
-import com.example.infbatchjob.service.monitoring.BatchMetricsReporter;
-import com.example.infbatchjob.service.monitoring.MetricsReporterFactory;
 import io.kubernetes.client.openapi.ApiException;
 import io.kubernetes.client.openapi.apis.BatchV1Api;
 import io.kubernetes.client.openapi.apis.CoreV1Api;
 import io.kubernetes.client.openapi.models.*;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 
 @ApplicationScoped
@@ -47,33 +37,17 @@ public class KubernetesJobService {
     @Inject
     ConfigMapService configMapService;
 
-    @Inject
-    MetricsReporterFactory metricsReporterFactory;
-
-    private final ExecutorService monitorExecutor = Executors.newCachedThreadPool();
-    private final Set<String> terminalMetricsSent = ConcurrentHashMap.newKeySet();
-
     /**
      * Starta ett nytt Kubernetes Job
      */
     public String startJob(JobStartRequest request) {
         try {
             Map<String, String> configMapData = configMapService.getConfigMapData(request.getConfigMapName());
-            String batchType = configMapData.getOrDefault("BATCH_TYP", "");
-            BatchMetricsReporter reporter = metricsReporterFactory.forBatchType(batchType);
 
             V1Job job = buildJob(request, configMapData);
             V1Job createdJob = batchV1Api.createNamespacedJob(namespace, job, null, null, null, null);
 
-            String createdJobName = createdJob.getMetadata().getName();
-            BatchMetricsContext metricsContext = createMetricsContext(createdJobName, createdJobName, configMapData, Instant.now());
-            reporter.onStart(metricsContext);
-
-            if (metricsReporterFactory.shouldMonitorAsync(batchType)) {
-                monitorJobAsync(createdJobName, reporter, metricsContext);
-            }
-
-            return createdJobName;
+            return createdJob.getMetadata().getName();
         } catch (ApiException e) {
             throw new JobException("Misslyckades att starta Job: " + e.getMessage(), e);
         }
@@ -101,11 +75,6 @@ public class KubernetesJobService {
         metadata.setName(jobName);
         metadata.setNamespace(namespace);
         metadata.putLabelsItem("configMap", request.getConfigMapName());
-
-        String batchType = configMapData.getOrDefault("BATCH_TYP", "").trim();
-        if (!batchType.isEmpty()) {
-            metadata.putLabelsItem("batchTyp", normalizeLabel(batchType));
-        }
 
         job.setMetadata(metadata);
 
@@ -223,17 +192,18 @@ public class KubernetesJobService {
         return config;
     }
 
-    /**
-     * Extrahera jobName från ConfigMap-namnet
-     * t.ex. "inf-batch-testapp1-config" -> "testapp1"
-     */
-    private String extractJobNameFromConfigMap(String configMapName) {
-        // Ta bort "inf-batch-" prefix och "-config" suffix om de finns
-        String name = configMapName
-            .replaceFirst("^inf-batch-", "")
+   /**
+    * Extrahera jobName från ConfigMap-namnet t.ex. "skv-batch-config"
+    * -> "skv-batch"
+    */
+   private String extractJobNameFromConfigMap(String configMapName)
+   {
+      // Ta bort "-config" suffix om de finns
+      // TODO - är detta vettigt? Kanske kräva jobnamn istället?
+      String name = configMapName
             .replaceFirst("-config$", "");
-        return name.isEmpty() ? configMapName : name;
-    }
+      return name.isEmpty() ? configMapName : name;
+   }
 
     /**
      * Parse command från ConfigMap (kommaseparerad sträng)
@@ -290,10 +260,6 @@ public class KubernetesJobService {
         Map<String, String> extraEnv;
     }
 
-    private String normalizeLabel(String value) {
-        return value.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._-]", "-");
-    }
-
     /**
      * Generera ett unikt Job-namn
      */
@@ -312,11 +278,6 @@ public class KubernetesJobService {
     public JobStatusResponse getJobStatus(String jobId) {
         try {
             V1Job job = batchV1Api.readNamespacedJob(jobId, namespace, null);
-            try {
-                reportTerminalFromJob(job);
-            } catch (Exception reportingError) {
-                LOG.warn("Metrics reporting failed while reading job status {}: {}", jobId, reportingError.getMessage());
-            }
             return mapJobToResponse(job);
         } catch (ApiException e) {
             if (e.getCode() == 404) {
@@ -361,18 +322,8 @@ public class KubernetesJobService {
      */
     public void deleteJob(String jobId) {
         try {
-            V1Job job = batchV1Api.readNamespacedJob(jobId, namespace, null);
             batchV1Api.deleteNamespacedJob(jobId, namespace, null, null, null, null, 
                 null, null);
-
-            try {
-                MetricsContextEnvelope envelope = buildEnvelopeForJob(job);
-                if (envelope != null) {
-                    envelope.reporter().onStop(envelope.context());
-                }
-            } catch (Exception reportingError) {
-                LOG.warn("Metrics reporting failed while deleting job {}: {}", jobId, reportingError.getMessage());
-            }
         } catch (ApiException e) {
             if (e.getCode() == 404) {
                 throw new JobException("Job hittades inte: " + jobId);
@@ -511,144 +462,5 @@ public class KubernetesJobService {
             }
         }
         return "PENDING";
-    }
-
-    private void monitorJobAsync(String jobId, BatchMetricsReporter reporter, BatchMetricsContext context) {
-        monitorExecutor.submit(() -> {
-            int faults = 0;
-            while (faults < 5) {
-                try {
-                    Thread.sleep(5000);
-                    V1Job job = batchV1Api.readNamespacedJob(jobId, namespace, null);
-                    String status = determineStatus(job.getStatus());
-                    if ("COMPLETED".equals(status)) {
-                        sendTerminalMetricOnce(jobId, "COMPLETED", reporter, context, null);
-                        return;
-                    }
-                    if ("FAILED".equals(status)) {
-                        sendTerminalMetricOnce(jobId, "FAILED", reporter, context, "Job failed");
-                        return;
-                    }
-                } catch (InterruptedException interruptedException) {
-                    Thread.currentThread().interrupt();
-                    sendTerminalMetricOnce(jobId, "FAILED", reporter, context, "Lifecycle monitor interrupted");
-                    return;
-                } catch (ApiException e) {
-                    faults++;
-                    LOG.warn("Failed reading job status for {} (attempt {}): {}", jobId, faults, e.getMessage());
-                } catch (Exception e) {
-                    faults++;
-                    LOG.warn("Unexpected monitoring error for {} (attempt {}): {}", jobId, faults, e.getMessage());
-                }
-            }
-            sendTerminalMetricOnce(jobId, "FAILED", reporter, context, "Too many status read failures");
-        });
-    }
-
-    private void reportTerminalFromJob(V1Job job) {
-        String status = determineStatus(job.getStatus());
-        if (!"COMPLETED".equals(status) && !"FAILED".equals(status)) {
-            return;
-        }
-
-        MetricsContextEnvelope envelope = buildEnvelopeForJob(job);
-        if (envelope == null) {
-            return;
-        }
-
-        if ("COMPLETED".equals(status)) {
-            sendTerminalMetricOnce(job.getMetadata().getName(), status, envelope.reporter(), envelope.context(), null);
-        } else {
-            sendTerminalMetricOnce(job.getMetadata().getName(), status, envelope.reporter(), envelope.context(), "Job failed");
-        }
-    }
-
-    private void sendTerminalMetricOnce(
-        String jobId,
-        String status,
-        BatchMetricsReporter reporter,
-        BatchMetricsContext context,
-        String reason
-    ) {
-        String dedupeKey = jobId + ":" + status;
-        if (!terminalMetricsSent.add(dedupeKey)) {
-            return;
-        }
-
-        if ("COMPLETED".equals(status)) {
-            reporter.onStop(context);
-        } else {
-            reporter.onError(context, reason);
-        }
-    }
-
-    private MetricsContextEnvelope buildEnvelopeForJob(V1Job job) {
-        if (job.getMetadata() == null || job.getMetadata().getLabels() == null) {
-            return null;
-        }
-
-        String configMapName = job.getMetadata().getLabels().get("configMap");
-        if (configMapName == null || configMapName.isBlank()) {
-            return null;
-        }
-
-        Map<String, String> configMapData = configMapService.getConfigMapData(configMapName);
-        String batchType = configMapData.getOrDefault("BATCH_TYP", "");
-        BatchMetricsReporter reporter = metricsReporterFactory.forBatchType(batchType);
-
-        Instant startTime = job.getStatus() != null && job.getStatus().getStartTime() != null
-            ? job.getStatus().getStartTime().toInstant()
-            : Instant.now();
-
-        BatchMetricsContext context = createMetricsContext(
-            job.getMetadata().getName(),
-            job.getMetadata().getName(),
-            configMapData,
-            startTime
-        );
-
-        return new MetricsContextEnvelope(reporter, context);
-    }
-
-    private BatchMetricsContext createMetricsContext(
-        String jobId,
-        String jobName,
-        Map<String, String> configMapData,
-        Instant startTime
-    ) {
-        String object = configMapData.getOrDefault("TO_JOB_NAME", jobName);
-        String chart = configMapData.getOrDefault("TO_ENV_NAME", "MANUELL");
-        String environment = "jbatch";
-        String user = Optional.ofNullable(System.getenv("LOGNAME"))
-            .orElse(Optional.ofNullable(System.getenv("USERNAME")).orElse("unknown"));
-
-        String server;
-        try {
-            server = InetAddress.getLocalHost().getHostName();
-        } catch (UnknownHostException e) {
-            server = "unknown";
-        }
-        if (server.contains(".")) {
-            server = server.substring(0, server.indexOf('.'));
-        }
-
-        return new BatchMetricsContext(
-            jobId,
-            object,
-            chart,
-            environment,
-            user,
-            server,
-            startTime,
-            0
-        );
-    }
-
-    @PreDestroy
-    void shutdownMonitor() {
-        monitorExecutor.shutdownNow();
-    }
-
-    private record MetricsContextEnvelope(BatchMetricsReporter reporter, BatchMetricsContext context) {
     }
 }

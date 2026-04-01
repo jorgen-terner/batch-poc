@@ -3,7 +3,7 @@ plugins {
     id 'io.quarkus' version "${quarkusPluginVersion}"
 }
 
-group = 'com.batchjobapp'
+group = 'infrastruktur.batch'
 version = '0.1.0'
 
 repositories {
@@ -40,7 +40,7 @@ tasks.register('runCli', JavaExec) {
     group = 'application'
     description = 'Run the batch-job CLI'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass = 'com.batchjobapp.cli.BatchJobCli'
+    mainClass = 'infrastruktur.batch.cli.BatchJobCli'
 }
 
 tasks.named('test') {

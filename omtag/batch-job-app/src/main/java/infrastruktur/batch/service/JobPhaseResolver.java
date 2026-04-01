@@ -1,4 +1,4 @@
-package com.batchjobapp.service;
+package infrastruktur.batch.service;
 
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobCondition;

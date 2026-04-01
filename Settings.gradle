@@ -11,5 +11,5 @@ pluginManagement {
 
 rootProject.name = 'inf-batch-job'
 
-include 'inf-batch-job-app'
+include 'inf-batch-job'
 include 'inf-batch-testapp1'

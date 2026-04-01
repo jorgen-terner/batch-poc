@@ -14,4 +14,4 @@ spec:
           image: myregistry/my-batch-worker:1.0.0
           env:
             - name: REPORT_URL
-              value: "http://batch-job-app.default.svc.cluster.local:8080/api/v1/jobs/default/sample-batch-job/report"
+              value: "http://op-proxy-app.default.svc.cluster.local:8080/api/v1/jobs/default/sample-batch-job/report"
