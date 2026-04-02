@@ -195,9 +195,9 @@ public final class BatchJobCli implements Runnable {
 
         @Override
         public Integer call() {
-            parent.printJson(parent.service().metrics(parent.namespace, jobName));
-            JobStatusResponse status = parent.service().status(parent.namespace, jobName);
-            return parent.exitCodeFromPhase(status.phase());
+            JobMetricsResponse metrics = parent.service().metrics(parent.namespace, jobName);
+            parent.printJson(metrics);
+            return parent.exitCodeFromPhase(metrics.phase());
         }
     }
 

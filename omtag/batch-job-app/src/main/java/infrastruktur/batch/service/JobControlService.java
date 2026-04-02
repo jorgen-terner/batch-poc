@@ -146,6 +146,8 @@ public class JobControlService {
         List<Pod> pods = filterPodsForCurrentJob(job, podList.getItems());
         JobMetricsCollector.PodMetricsSummary podMetrics = jobMetricsCollector.collect(pods);
 
+        String phase = jobPhaseResolver.resolvePhase(job);
+
         JobStatus jobStatus = job.getStatus();
         Instant startTime = parseInstant(jobStatus == null ? null : jobStatus.getStartTime());
         Instant completionTime = parseInstant(jobStatus == null ? null : jobStatus.getCompletionTime());
@@ -163,6 +165,7 @@ public class JobControlService {
         return new JobMetricsResponse(
             namespace,
             jobName,
+            phase,
             pods.size(),
             podMetrics.totalRestarts(),
             podMetrics.lastExitCode(),

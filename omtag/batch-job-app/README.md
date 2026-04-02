@@ -1,6 +1,6 @@
 # op-proxy-app
 
-Java 21-applikation for att styra forskapade Kubernetes Jobs (suspended Jobs) via REST API.
+Java 21-applikation för att styra förskapade Kubernetes Jobs (suspended Jobs) via REST API.
 
 ## Teknikval
 
@@ -12,14 +12,14 @@ Java 21-applikation for att styra forskapade Kubernetes Jobs (suspended Jobs) vi
 
 ## Koncept
 
-I stallet for att skapa nya Jobs med image/version vid varje korning, utgar appen fran att Job redan finns i Kubernetes med:
+I stället för att skapa nya Jobs med image/version vid varje körning, utgår appen från att Job redan finns i Kubernetes med:
 
 ```yaml
 spec:
   suspend: true
 ```
 
-API:et andrar sedan Job-state genom att patcha `spec.suspend` och hantera pods.
+API:et ändrar sedan Job-state genom att patcha `spec.suspend` och hantera pods.
 
 ## Starta lokalt (Quarkus)
 
@@ -35,9 +35,9 @@ Bygg jar:
 
 ## CLI (forslag 1)
 
-CLI:t anvander samma JobControlService som API:t men kor utan HTTP-lager.
+CLI:t använder samma JobControlService som API:t men kör utan HTTP-lager.
 
-Visa hjalp:
+Visa hjälp:
 
 ```bash
 ./gradlew runCli --args="--help"
@@ -203,14 +203,14 @@ oc -n production scale deployment/op-proxy-app --replicas=2
 ### Asynkront start-anrop
 
 `start` unsuspendar Jobbet och returnerar direkt.
-Anropa `status` for att folja korningen tills `SUCCEEDED` eller `FAILED`.
+Anropa `status` för att följa körningen tills `SUCCEEDED` eller `FAILED`.
 
 Query-parametrar:
-- `timeoutSeconds` (valfri) - sattes som `spec.activeDeadlineSeconds` pa Jobbet
+- `timeoutSeconds` (valfri) - sätts som `spec.activeDeadlineSeconds` på Jobbet
 
-`restart` accepterar ocksa:
-- `timeoutSeconds` (valfri) - tillampas pa det nyskapade Jobbet som `spec.activeDeadlineSeconds`
-- `keepFailedPods` (default `true`) - om `true` behalls terminala pods (`Failed`/`Succeeded`) for felsokning
+`restart` accepterar också:
+- `timeoutSeconds` (valfri) - tillämpas på det nyskapade Jobbet som `spec.activeDeadlineSeconds`
+- `keepFailedPods` (default `true`) - om `true` behålls terminala pods (`Failed`/`Succeeded`) för felsökning
 
 ### Exempel anrop
 
@@ -225,17 +225,17 @@ curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/restart
 curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/restart?keepFailedPods=false"
 ```
 
-### Pods vid felsokning
+### Pods vid felsökning
 
 Vid `stop` rensas endast aktiva pods.
-Vid `restart` styr `keepFailedPods` om terminala pods (`Failed`/`Succeeded`) ska behallas (`true`) eller rensas (`false`).
+Vid `restart` styr `keepFailedPods` om terminala pods (`Failed`/`Succeeded`) ska behållas (`true`) eller rensas (`false`).
 
 ### Report payload (fran Job till appen)
 
-`report` ar frivillig. Job-status och grundmetrics hamtas primart fran Kubernetes Job/Pod-status.
-Skicka report endast om du vill bifoga affarsdata.
+`report` är frivillig. Job-status och grundmetrics hämtas primärt från Kubernetes Job/Pod-status.
+Skicka report endast om du vill bifoga affärsdata.
 
-Om `report` saknas helt fungerar `status` och `metrics` anda, och appen anvander da Kubernetes-data (bland annat exit code samt termination reason/message nar de finns).
+Om `report` saknas helt fungerar `status` och `metrics` ändå, och appen använder då Kubernetes-data (bland annat exit code samt termination reason/message när de finns).
 
 ```json
 {
@@ -258,13 +258,13 @@ Minimal report (också giltig):
 }
 ```
 
-Tom report payload accepteras ocksa och returnerar `REPORTED` utan att lagra ny rapport.
+Tom report payload accepteras också och returnerar `REPORTED` utan att lagra ny rapport.
 
-## Exempel flode
+## Exempel flöde
 
-1. Deployment innehaller ett Job med `suspend: true`.
+1. Deployment innehåller ett Job med `suspend: true`.
 2. Klient anropar `start`.
 3. Appen patchar Job till `suspend: false`.
-4. Jobbet skickar frivillig rapport till `report`-endpoint under korning.
-5. Klient laser `status` och `metrics` tills terminal fas.
+4. Jobbet skickar frivillig rapport till `report`-endpoint under körning.
+5. Klient läser `status` och `metrics` tills terminal fas.
 6. Vid behov anropas `stop` eller `restart`.

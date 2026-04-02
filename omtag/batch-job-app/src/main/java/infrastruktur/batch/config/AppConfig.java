@@ -14,9 +14,7 @@ public class AppConfig {
     @Produces
     @ApplicationScoped
     public KubernetesClient kubernetesClient() {
-        if (kubernetesClient == null) {
-            kubernetesClient = new KubernetesClientBuilder().build();
-        }
+        kubernetesClient = new KubernetesClientBuilder().build();
         return kubernetesClient;
     }
 

@@ -6,6 +6,7 @@ import java.util.Map;
 public record JobMetricsResponse(
     String namespace,
     String jobName,
+    String phase,
     int podCount,
     int totalContainerRestarts,
     Integer lastExitCode,

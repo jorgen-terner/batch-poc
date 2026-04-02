@@ -63,6 +63,21 @@ public class KubernetesJobGateway {
         return activePodNames.size();
     }
 
+    public int deletePods(String namespace, String jobName) {
+        var podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
+        List<String> podNames = new ArrayList<>();
+        for (Pod pod : podList.getItems()) {
+            if (pod.getMetadata() != null && pod.getMetadata().getName() != null) {
+                podNames.add(pod.getMetadata().getName());
+            }
+        }
+
+        for (String podName : podNames) {
+            client.pods().inNamespace(namespace).withName(podName).delete();
+        }
+        return podNames.size();
+    }
+
     public void deleteJob(String namespace, String jobName) {
         client.batch().v1().jobs().inNamespace(namespace).withName(jobName).delete();
     }
