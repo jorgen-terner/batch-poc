@@ -208,12 +208,9 @@ oc -n production scale deployment/op-proxy-app --replicas=2
 `start` unsuspendar Jobbet och returnerar direkt.
 Anropa `status` för att följa körningen tills `SUCCEEDED` eller `FAILED`.
 
-Query-parametrar:
-- `timeoutSeconds` (valfri) - sätts som `spec.activeDeadlineSeconds` på Jobbet
-
-`restart` accepterar också:
-- `timeoutSeconds` (valfri) - tillämpas på det nyskapade Jobbet som `spec.activeDeadlineSeconds`
-- `keepFailedPods` (default `true`) - om `true` behålls terminala pods (`Failed`/`Succeeded`) för felsökning
+Parametrar för `start` och `restart`:
+- Gemensam parameter: `timeoutSeconds` (HTTP) / `--timeout-seconds` (CLI), valfri. Sätts som `spec.activeDeadlineSeconds`.
+- Endast för `restart`: `keepFailedPods` (HTTP) / `--keep-failed-pods` (CLI), default `true`. Styr om terminala pods (`Failed`/`Succeeded`) behålls för felsökning.
 
 ### Exempel anrop
 
