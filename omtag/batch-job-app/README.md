@@ -33,7 +33,7 @@ Bygg jar:
 ./gradlew build
 ```
 
-## CLI (forslag 1)
+## CLI (förslag 1)
 
 CLI:t använder samma JobControlService som API:t men kör utan HTTP-lager.
 
@@ -47,11 +47,14 @@ Exempel:
 
 ```bash
 ./gradlew runCli --args="--namespace default start sample-batch-job"
+./gradlew runCli --args="--namespace default start sample-batch-job --timeout-seconds 900"
 ./gradlew runCli --args="--namespace default status sample-batch-job"
 ./gradlew runCli --args="--namespace default status sample-batch-job --watch --interval-seconds 5 --timeout-seconds 600"
 ./gradlew runCli --args="--namespace default metrics sample-batch-job"
 ./gradlew runCli --args="--namespace default stop sample-batch-job"
 ./gradlew runCli --args="--namespace default restart sample-batch-job"
+./gradlew runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true"
+./gradlew runCli --args="--namespace default restart sample-batch-job --keep-failed-pods=false"
 ```
 
 ### Exit-koder (CI/CD)
@@ -215,14 +218,22 @@ Query-parametrar:
 ### Exempel anrop
 
 ```bash
-# Starta asynkront med timeout pa 15 minuter
+# Starta asynkront med timeout på 15 minuter
 curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/start?timeoutSeconds=900"
 
-# Restart med timeout och behall terminala pods
+# Restart med timeout och behåll terminala pods
 curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/restart?timeoutSeconds=900&keepFailedPods=true"
 
 # Restart och rensa alla pods
 curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/restart?keepFailedPods=false"
+```
+
+Motsvarande CLI-anrop:
+
+```bash
+./gradlew runCli --args="--namespace default start sample-batch-job --timeout-seconds 900"
+./gradlew runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true"
+./gradlew runCli --args="--namespace default restart sample-batch-job --keep-failed-pods=false"
 ```
 
 ### Pods vid felsökning
@@ -230,7 +241,7 @@ curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/restart
 Vid `stop` rensas endast aktiva pods.
 Vid `restart` styr `keepFailedPods` om terminala pods (`Failed`/`Succeeded`) ska behållas (`true`) eller rensas (`false`).
 
-### Report payload (fran Job till appen)
+### Report payload (från Job till appen)
 
 `report` är frivillig. Job-status och grundmetrics hämtas primärt från Kubernetes Job/Pod-status.
 Skicka report endast om du vill bifoga affärsdata.
