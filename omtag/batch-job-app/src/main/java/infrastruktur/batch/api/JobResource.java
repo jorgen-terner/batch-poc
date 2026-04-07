@@ -5,13 +5,13 @@ import infrastruktur.batch.model.JobMetricsResponse;
 import infrastruktur.batch.model.JobReportRequest;
 import infrastruktur.batch.model.JobStatusResponse;
 import infrastruktur.batch.service.JobControlService;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
@@ -23,10 +23,15 @@ import java.util.Map;
 @Consumes(MediaType.APPLICATION_JSON)
 public class JobResource {
     private final JobControlService jobControlService;
+    private final String namespace;
 
     @Inject
-    public JobResource(JobControlService jobControlService) {
+    public JobResource(
+        JobControlService jobControlService,
+        @ConfigProperty(name = "batch.job.namespace", defaultValue = "default") String namespace
+    ) {
         this.jobControlService = jobControlService;
+        this.namespace = namespace;
     }
 
     @GET
@@ -36,26 +41,24 @@ public class JobResource {
     }
 
     @POST
-    @Path("api/v1/jobs/{namespace}/{jobName}/start")
+    @Path("api/v1/jobs/{jobName}/start")
     public ActionResponse start(
-        @PathParam("namespace") String namespace,
-        @PathParam("jobName") String jobName,
+        @jakarta.ws.rs.PathParam("jobName") String jobName,
         @QueryParam("timeoutSeconds") Long timeoutSeconds
     ) {
         return jobControlService.start(namespace, jobName, timeoutSeconds);
     }
 
     @POST
-    @Path("api/v1/jobs/{namespace}/{jobName}/stop")
-    public ActionResponse stop(@PathParam("namespace") String namespace, @PathParam("jobName") String jobName) {
+    @Path("api/v1/jobs/{jobName}/stop")
+    public ActionResponse stop(@jakarta.ws.rs.PathParam("jobName") String jobName) {
         return jobControlService.stop(namespace, jobName);
     }
 
     @POST
-    @Path("api/v1/jobs/{namespace}/{jobName}/restart")
+    @Path("api/v1/jobs/{jobName}/restart")
     public ActionResponse restart(
-        @PathParam("namespace") String namespace,
-        @PathParam("jobName") String jobName,
+        @jakarta.ws.rs.PathParam("jobName") String jobName,
         @QueryParam("timeoutSeconds") Long timeoutSeconds,
         @QueryParam("keepFailedPods") @DefaultValue("true") boolean keepFailedPods
     ) {
@@ -63,22 +66,21 @@ public class JobResource {
     }
 
     @GET
-    @Path("api/v1/jobs/{namespace}/{jobName}/status")
-    public JobStatusResponse status(@PathParam("namespace") String namespace, @PathParam("jobName") String jobName) {
+    @Path("api/v1/jobs/{jobName}/status")
+    public JobStatusResponse status(@jakarta.ws.rs.PathParam("jobName") String jobName) {
         return jobControlService.status(namespace, jobName);
     }
 
     @GET
-    @Path("api/v1/jobs/{namespace}/{jobName}/metrics")
-    public JobMetricsResponse metrics(@PathParam("namespace") String namespace, @PathParam("jobName") String jobName) {
+    @Path("api/v1/jobs/{jobName}/metrics")
+    public JobMetricsResponse metrics(@jakarta.ws.rs.PathParam("jobName") String jobName) {
         return jobControlService.metrics(namespace, jobName);
     }
 
     @POST
-    @Path("api/v1/jobs/{namespace}/{jobName}/report")
+    @Path("api/v1/jobs/{jobName}/report")
     public ActionResponse report(
-        @PathParam("namespace") String namespace,
-        @PathParam("jobName") String jobName,
+        @jakarta.ws.rs.PathParam("jobName") String jobName,
         JobReportRequest request
     ) {
         return jobControlService.report(namespace, jobName, request);

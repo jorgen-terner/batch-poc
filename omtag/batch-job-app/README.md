@@ -196,12 +196,14 @@ oc -n production scale deployment/op-proxy-app --replicas=2
 
 ## Endpoints
 
-- `POST /api/v1/jobs/{namespace}/{jobName}/start` (asynkront)
-- `POST /api/v1/jobs/{namespace}/{jobName}/stop`
-- `POST /api/v1/jobs/{namespace}/{jobName}/restart`
-- `GET /api/v1/jobs/{namespace}/{jobName}/status`
-- `GET /api/v1/jobs/{namespace}/{jobName}/metrics`
-- `POST /api/v1/jobs/{namespace}/{jobName}/report`
+- `POST /api/v1/jobs/{jobName}/start` (asynkront)
+- `POST /api/v1/jobs/{jobName}/stop`
+- `POST /api/v1/jobs/{jobName}/restart`
+- `GET /api/v1/jobs/{jobName}/status`
+- `GET /api/v1/jobs/{jobName}/metrics`
+- `POST /api/v1/jobs/{jobName}/report`
+
+REST-API:t är namespace-bundet per appinstans. Namespace läses från `BATCH_JOB_NAMESPACE` och sätts automatiskt från poddens eget namespace i OpenShift-deploymenten.
 
 ### Asynkront start-anrop
 
@@ -216,13 +218,13 @@ Parametrar för `start` och `restart`:
 
 ```bash
 # Starta asynkront med timeout på 15 minuter
-curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/start?timeoutSeconds=900"
+curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/start?timeoutSeconds=900"
 
 # Restart med timeout och behåll terminala pods
-curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/restart?timeoutSeconds=900&keepFailedPods=true"
+curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/restart?timeoutSeconds=900&keepFailedPods=true"
 
 # Restart och rensa alla pods
-curl -X POST "http://localhost:8080/api/v1/jobs/default/sample-batch-job/restart?keepFailedPods=false"
+curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/restart?keepFailedPods=false"
 ```
 
 Motsvarande CLI-anrop:

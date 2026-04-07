@@ -5,6 +5,7 @@ import infrastruktur.batch.model.JobMetricsResponse;
 import infrastruktur.batch.model.JobReportRequest;
 import infrastruktur.batch.model.JobReportSnapshot;
 import infrastruktur.batch.model.JobStatusResponse;
+import infrastruktur.batch.metrics.JobMetricsReporter;
 import infrastruktur.batch.store.JobReportStore;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
@@ -33,6 +34,7 @@ public class JobControlService {
 
     private final KubernetesClient client;
     private final JobReportStore reportStore;
+    private final JobMetricsReporter jobMetricsReporter;
     private final KubernetesJobGateway kubernetesJobGateway;
     private final JobPhaseResolver jobPhaseResolver;
     private final JobMetricsCollector jobMetricsCollector;
@@ -43,6 +45,7 @@ public class JobControlService {
     public JobControlService(
         KubernetesClient client,
         JobReportStore reportStore,
+        JobMetricsReporter jobMetricsReporter,
         KubernetesJobGateway kubernetesJobGateway,
         JobPhaseResolver jobPhaseResolver,
         JobMetricsCollector jobMetricsCollector,
@@ -51,6 +54,7 @@ public class JobControlService {
     ) {
         this.client = client;
         this.reportStore = reportStore;
+        this.jobMetricsReporter = jobMetricsReporter;
         this.kubernetesJobGateway = kubernetesJobGateway;
         this.jobPhaseResolver = jobPhaseResolver;
         this.jobMetricsCollector = jobMetricsCollector;
@@ -68,6 +72,8 @@ public class JobControlService {
         this(
             client,
             reportStore,
+            (namespace, jobName, snapshot) -> {
+            },
             new KubernetesJobGateway(client),
             new JobPhaseResolver(),
             new JobMetricsCollector(),
@@ -203,7 +209,8 @@ public class JobControlService {
             return action(namespace, jobName, "report", "REPORTED", "Empty report accepted");
         }
 
-        reportStore.put(namespace, jobName, request);
+        JobReportSnapshot snapshot = reportStore.put(namespace, jobName, request);
+        jobMetricsReporter.report(namespace, jobName, snapshot);
 
         LOG.info("Stored report for job {}/{} with status {}", namespace, jobName, request.status());
         return action(namespace, jobName, "report", "REPORTED", "Report accepted");
