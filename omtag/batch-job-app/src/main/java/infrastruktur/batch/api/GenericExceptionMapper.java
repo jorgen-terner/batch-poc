@@ -16,7 +16,10 @@ public class GenericExceptionMapper implements ExceptionMapper<Exception> {
     public Response toResponse(Exception exception) {
         LOG.error("Unhandled error", exception);
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-            .entity(Map.of("error", exception.getMessage()))
+            .entity(Map.of(
+                "error", "Internal server error",
+                "code", "INTERNAL_ERROR"
+            ))
             .build();
     }
 }

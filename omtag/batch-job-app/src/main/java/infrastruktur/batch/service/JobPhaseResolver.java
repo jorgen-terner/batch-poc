@@ -50,7 +50,7 @@ public class JobPhaseResolver {
         return "SUCCEEDED".equals(normalized) || "FAILED".equals(normalized);
     }
 
-    public String normalize(String value) {
+    public static String normalize(String value) {
         return value == null ? "UNKNOWN" : value.trim().toUpperCase();
     }
 }

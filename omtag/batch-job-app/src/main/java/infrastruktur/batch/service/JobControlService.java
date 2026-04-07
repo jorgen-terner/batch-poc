@@ -10,6 +10,7 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobStatus;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -27,12 +28,16 @@ import java.util.Optional;
 @ApplicationScoped
 public class JobControlService {
     private static final Logger LOG = LoggerFactory.getLogger(JobControlService.class);
+    private static final long DEFAULT_DELETION_POLL_INTERVAL_MILLIS = 1000L;
+    private static final int DEFAULT_DELETION_MAX_ATTEMPTS = 30;
 
     private final KubernetesClient client;
     private final JobReportStore reportStore;
     private final KubernetesJobGateway kubernetesJobGateway;
     private final JobPhaseResolver jobPhaseResolver;
     private final JobMetricsCollector jobMetricsCollector;
+    private final long deletionPollIntervalMillis;
+    private final int deletionMaxAttempts;
 
     @Inject
     public JobControlService(
@@ -40,13 +45,23 @@ public class JobControlService {
         JobReportStore reportStore,
         KubernetesJobGateway kubernetesJobGateway,
         JobPhaseResolver jobPhaseResolver,
-        JobMetricsCollector jobMetricsCollector
+        JobMetricsCollector jobMetricsCollector,
+        @ConfigProperty(name = "batch.job.deletion.poll-interval-millis", defaultValue = "1000") long deletionPollIntervalMillis,
+        @ConfigProperty(name = "batch.job.deletion.max-attempts", defaultValue = "30") int deletionMaxAttempts
     ) {
         this.client = client;
         this.reportStore = reportStore;
         this.kubernetesJobGateway = kubernetesJobGateway;
         this.jobPhaseResolver = jobPhaseResolver;
         this.jobMetricsCollector = jobMetricsCollector;
+        if (deletionPollIntervalMillis < 1) {
+            throw new IllegalArgumentException("batch.job.deletion.poll-interval-millis must be >= 1");
+        }
+        if (deletionMaxAttempts < 1) {
+            throw new IllegalArgumentException("batch.job.deletion.max-attempts must be >= 1");
+        }
+        this.deletionPollIntervalMillis = deletionPollIntervalMillis;
+        this.deletionMaxAttempts = deletionMaxAttempts;
     }
 
     public JobControlService(KubernetesClient client, JobReportStore reportStore) {
@@ -55,7 +70,9 @@ public class JobControlService {
             reportStore,
             new KubernetesJobGateway(client),
             new JobPhaseResolver(),
-            new JobMetricsCollector()
+            new JobMetricsCollector(),
+            DEFAULT_DELETION_POLL_INTERVAL_MILLIS,
+            DEFAULT_DELETION_MAX_ATTEMPTS
         );
     }
 
@@ -93,7 +110,7 @@ public class JobControlService {
         } else {
             kubernetesJobGateway.deleteJob(namespace, jobName);
         }
-        kubernetesJobGateway.waitForDeletion(namespace, jobName, 1000, 30);
+        kubernetesJobGateway.waitForDeletion(namespace, jobName, deletionPollIntervalMillis, deletionMaxAttempts);
 
         Job recreated = kubernetesJobGateway.createRestartedJob(existing, timeoutSeconds);
         kubernetesJobGateway.createJob(namespace, recreated);

@@ -1,14 +1,18 @@
 package infrastruktur.batch.cli;
 
 import infrastruktur.batch.model.ActionResponse;
+import infrastruktur.batch.model.JobMetricsResponse;
 import infrastruktur.batch.model.JobStatusResponse;
 import infrastruktur.batch.service.JobControlService;
+import infrastruktur.batch.service.JobPhaseResolver;
 import infrastruktur.batch.store.JobReportStore;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -31,19 +35,21 @@ import java.util.concurrent.Callable;
     }
 )
 public final class BatchJobCli implements Runnable {
+    private static final Logger LOG = LoggerFactory.getLogger(BatchJobCli.class);
+
     @Option(names = {"-n", "--namespace"}, defaultValue = "default", description = "Kubernetes namespace")
     String namespace;
 
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+    private CommandLine commandLine;
     private KubernetesClient kubernetesClient;
     private JobControlService jobControlService;
 
     public static void main(String[] args) {
         BatchJobCli root = new BatchJobCli();
-        CommandLine commandLine = new CommandLine(root);
         int exitCode;
         try {
-            exitCode = commandLine.execute(args);
+            exitCode = root.cli().execute(args);
         } finally {
             root.close();
         }
@@ -52,7 +58,7 @@ public final class BatchJobCli implements Runnable {
 
     @Override
     public void run() {
-        CommandLine.usage(this, System.out);
+        cli().usage(cli().getOut());
     }
 
     private JobControlService service() {
@@ -65,10 +71,19 @@ public final class BatchJobCli implements Runnable {
 
     private void printJson(Object payload) {
         try {
-            System.out.println(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(payload));
+            String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(payload);
+            cli().getOut().println(json);
         } catch (JsonProcessingException ex) {
+            LOG.error("Failed to serialize CLI output payload", ex);
             throw new IllegalStateException("Failed to serialize CLI output", ex);
         }
+    }
+
+    private CommandLine cli() {
+        if (commandLine == null) {
+            commandLine = new CommandLine(this);
+        }
+        return commandLine;
     }
 
     private void close() {
@@ -202,7 +217,7 @@ public final class BatchJobCli implements Runnable {
     }
 
     private int exitCodeFromState(String state) {
-        return switch (normalize(state)) {
+        return switch (JobPhaseResolver.normalize(state)) {
             case "SUCCEEDED" -> 0;
             case "RUNNING", "PENDING" -> 10;
             case "FAILED" -> 2;
@@ -212,17 +227,13 @@ public final class BatchJobCli implements Runnable {
     }
 
     private int exitCodeFromPhase(String phase) {
-        return switch (normalize(phase)) {
+        return switch (JobPhaseResolver.normalize(phase)) {
             case "SUCCEEDED" -> 0;
             case "RUNNING", "PENDING" -> 10;
             case "FAILED" -> 2;
             case "SUSPENDED" -> 3;
             default -> 4;
         };
-    }
-
-    private String normalize(String value) {
-        return value == null ? "UNKNOWN" : value.trim().toUpperCase();
     }
 
     private void sleep(long millis) {
