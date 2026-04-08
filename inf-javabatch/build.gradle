@@ -1,0 +1,98 @@
+plugins {
+    id 'java'
+    id 'io.quarkus'
+}
+
+group = 'infrastruktur.batch'
+version = '0.1.0'
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+    implementation 'io.quarkus:quarkus-arc'
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+
+    testImplementation 'io.quarkus:quarkus-junit5'
+}
+
+def rpmWorkDir = layout.buildDirectory.dir('rpm-work')
+def rpmTopDir = rpmWorkDir.map { it.dir('rpmbuild') }
+def rpmSourceRoot = rpmWorkDir.map { it.dir("sources/inf-javabatch-${project.version}") }
+
+tasks.register('prepareRpmSources', Copy) {
+    dependsOn tasks.named('quarkusBuild')
+
+    into rpmSourceRoot
+
+    from("$buildDir/quarkus-app") {
+        into 'opt/inf-javabatch'
+    }
+
+    from('src/rpm/bin/inf-javabatch') {
+        into 'opt/inf-javabatch/bin'
+    }
+}
+
+tasks.register('prepareRpmBuildContext') {
+    dependsOn tasks.named('prepareRpmSources')
+
+    outputs.dir(rpmWorkDir)
+
+    doLast {
+        copy {
+            from('src/rpm/inf-javabatch.spec')
+            into(rpmWorkDir.get().asFile)
+            filter { line ->
+                line
+                    .replace('@VERSION@', project.version.toString())
+                    .replace('@RELEASE@', '1')
+            }
+        }
+
+        copy {
+            from(rpmSourceRoot)
+            into(rpmTopDir.get().dir('SOURCES').asFile)
+        }
+    }
+}
+
+tasks.register('runRpmbuild', Exec) {
+    dependsOn tasks.named('prepareRpmBuildContext')
+    commandLine(
+        'docker', 'run', '--rm',
+        '-v', "${rpmWorkDir.get().asFile.absolutePath.replace('\\', '/') }:/work",
+        '-w', '/work',
+        'rockylinux:9',
+        'bash', '-lc',
+        'dnf install -y rpm-build >/dev/null && mkdir -p rpmbuild/BUILD rpmbuild/RPMS rpmbuild/SRPMS rpmbuild/SPECS rpmbuild/SOURCES && rpmbuild --define "_topdir /work/rpmbuild" -bb /work/inf-javabatch.spec'
+    )
+}
+
+tasks.register('collectRpm', Copy) {
+    dependsOn tasks.named('runRpmbuild')
+    from(rpmTopDir.map { it.dir('RPMS') })
+    include('**/*.rpm')
+    into(layout.buildDirectory.dir('distributions'))
+}
+
+tasks.register('packageRpm') {
+    dependsOn tasks.named('collectRpm')
+}
+
+tasks.named('assemble') {
+    dependsOn tasks.named('packageRpm')
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

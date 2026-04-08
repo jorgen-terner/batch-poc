@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_HOME="/opt/inf-javabatch"
+JAVA_BIN="${JAVA_HOME:-}/bin/java"
+
+if [ ! -x "$JAVA_BIN" ]; then
+  JAVA_BIN="$(command -v java)"
+fi
+
+declare -a JAVA_OPTS_ARRAY=()
+if [ -n "${JAVA_OPTS:-}" ]; then
+  read -r -a JAVA_OPTS_ARRAY <<< "${JAVA_OPTS}"
+fi
+
+exec "$JAVA_BIN" "${JAVA_OPTS_ARRAY[@]}" -jar "$APP_HOME/quarkus-run.jar"

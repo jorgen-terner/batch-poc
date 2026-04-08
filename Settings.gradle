@@ -13,3 +13,4 @@ rootProject.name = 'inf-batch-job'
 
 include 'inf-batch-job'
 include 'inf-batch-testapp1'
+include 'inf-javabatch'
