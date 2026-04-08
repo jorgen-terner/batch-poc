@@ -33,39 +33,6 @@ Bygg jar:
 ./gradlew build
 ```
 
-## CLI (förslag 1)
-
-CLI:t använder samma JobControlService som API:t men kör utan HTTP-lager.
-
-Visa hjälp:
-
-```bash
-./gradlew runCli --args="--help"
-```
-
-Exempel:
-
-```bash
-./gradlew runCli --args="--namespace default start sample-batch-job"
-./gradlew runCli --args="--namespace default start sample-batch-job --timeout-seconds 900"
-./gradlew runCli --args="--namespace default status sample-batch-job"
-./gradlew runCli --args="--namespace default status sample-batch-job --watch --interval-seconds 5 --timeout-seconds 600"
-./gradlew runCli --args="--namespace default metrics sample-batch-job"
-./gradlew runCli --args="--namespace default stop sample-batch-job"
-./gradlew runCli --args="--namespace default restart sample-batch-job"
-./gradlew runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true"
-./gradlew runCli --args="--namespace default restart sample-batch-job --keep-failed-pods=false"
-```
-
-### Exit-koder (CI/CD)
-
-- `0` = `SUCCEEDED`
-- `10` = `RUNNING` eller `PENDING`
-- `2` = `FAILED`
-- `3` = `SUSPENDED`
-- `4` = `UNKNOWN`
-- `124` = timeout i `status --watch`
-
 ## Deploy till OpenShift
 
 ### Förutsättningar
@@ -194,7 +161,11 @@ oc -n production scale deployment/op-proxy-app --replicas=2
 - `MEMORY_REQUEST` - Memory request (default: 256Mi)
 - `MEMORY_LIMIT` - Memory limit (default: 512Mi)
 
-## Endpoints
+## API (HTTP och CLI)
+
+CLI:t använder samma JobControlService som HTTP-API:t, men utan HTTP-lager.
+
+### HTTP-endpoints
 
 - `POST /api/v1/jobs/{jobName}/start` (asynkront)
 - `POST /api/v1/jobs/{jobName}/stop`
@@ -250,7 +221,15 @@ curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/restart" \
   -d '{"keepFailedPods": false}'
 ```
 
-Motsvarande CLI-anrop:
+### CLI-API
+
+Visa hjälp:
+
+```bash
+./gradlew runCli --args="--help"
+```
+
+Exempel anrop:
 
 ```bash
 ./gradlew runCli --args="--namespace default start sample-batch-job --timeout-seconds 900"
@@ -262,6 +241,14 @@ Motsvarande CLI-anrop:
 
 `--parameter` kan anges flera gånger och ska ha formatet `name=value`.
 Dubbel parameternyckel i samma CLI-anrop avvisas.
+
+Exit-koder (CI/CD):
+- `0` = `SUCCEEDED`
+- `10` = `RUNNING` eller `PENDING`
+- `2` = `FAILED`
+- `3` = `SUSPENDED`
+- `4` = `UNKNOWN`
+- `124` = timeout i `status --watch`
 
 ### Pods vid felsökning
 
