@@ -17,6 +17,8 @@ spec:
         - name: inf-javabatch
           image: example-job:latest
           imagePullPolicy: IfNotPresent
+          command:
+            - /opt/inf-javabatch/bin/inf-javabatch
           envFrom:
             - configMapRef:
                 name: example-job-hooks
