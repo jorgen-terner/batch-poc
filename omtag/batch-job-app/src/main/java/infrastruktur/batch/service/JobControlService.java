@@ -1,10 +1,13 @@
 package infrastruktur.batch.service;
 
 import infrastruktur.batch.model.ActionResponse;
+import infrastruktur.batch.model.JobParameterVO;
 import infrastruktur.batch.model.JobMetricsResponse;
 import infrastruktur.batch.model.JobReportRequest;
 import infrastruktur.batch.model.JobReportSnapshot;
 import infrastruktur.batch.model.JobStatusResponse;
+import infrastruktur.batch.model.RestartJobRequestVO;
+import infrastruktur.batch.model.StartJobRequestVO;
 import infrastruktur.batch.metrics.JobMetricsReporter;
 import infrastruktur.batch.store.JobReportStore;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -25,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @ApplicationScoped
 public class JobControlService {
@@ -82,15 +86,35 @@ public class JobControlService {
         );
     }
 
-    public ActionResponse start(String namespace, String jobName, Long timeoutSeconds) {
-        validateTimeoutSeconds(timeoutSeconds);
-        kubernetesJobGateway.requireJob(namespace, jobName);
-        if (timeoutSeconds != null) {
-            kubernetesJobGateway.patchActiveDeadlineSeconds(namespace, jobName, timeoutSeconds);
-        }
-        kubernetesJobGateway.patchSuspend(namespace, jobName, false);
+    public ActionResponse start(String namespace, String jobName, StartJobRequestVO request) {
+        Long timeoutSeconds = request == null ? null : request.timeoutSeconds();
+        Map<String, String> parameters = normalizeParameters(request == null ? null : request.parameters());
 
-        LOG.info("Started job {}/{} by unsuspending (timeoutSeconds={})", namespace, jobName, timeoutSeconds);
+        validateTimeoutSeconds(timeoutSeconds);
+        if (parameters.isEmpty()) {
+            kubernetesJobGateway.requireJob(namespace, jobName);
+            kubernetesJobGateway.patchStartConfiguration(namespace, jobName, timeoutSeconds);
+            LOG.info("Started job {}/{} by unsuspending (timeoutSeconds={})", namespace, jobName, timeoutSeconds);
+            return action(namespace, jobName, "start", "RUNNING", "Job unsuspended");
+        }
+
+        Job existing = kubernetesJobGateway.requireJob(namespace, jobName);
+        kubernetesJobGateway.patchSuspend(namespace, jobName, true);
+        int deletedPods = kubernetesJobGateway.deleteActivePods(namespace, jobName);
+        kubernetesJobGateway.deleteJobPreservingPods(namespace, jobName);
+        kubernetesJobGateway.waitForDeletion(namespace, jobName, deletionPollIntervalMillis, deletionMaxAttempts);
+
+        Job recreated = kubernetesJobGateway.createRestartedJob(existing, timeoutSeconds, parameters);
+        kubernetesJobGateway.createJob(namespace, recreated);
+
+        LOG.info(
+            "Started job {}/{} by recreate (deletedActivePods={}, timeoutSeconds={}, parameters={})",
+            namespace,
+            jobName,
+            deletedPods,
+            timeoutSeconds,
+            parameters.keySet()
+        );
         return action(namespace, jobName, "start", "RUNNING", "Job unsuspended");
     }
 
@@ -103,7 +127,11 @@ public class JobControlService {
         return action(namespace, jobName, "stop", "SUSPENDED", "Job suspended and active pods deleted: " + deletedPods);
     }
 
-    public ActionResponse restart(String namespace, String jobName, Long timeoutSeconds, boolean keepFailedPods) {
+    public ActionResponse restart(String namespace, String jobName, RestartJobRequestVO request) {
+        Long timeoutSeconds = request == null ? null : request.timeoutSeconds();
+        boolean keepFailedPods = request == null || request.keepFailedPods() == null || request.keepFailedPods();
+        Map<String, String> parameters = normalizeParameters(request == null ? null : request.parameters());
+
         validateTimeoutSeconds(timeoutSeconds);
         Job existing = kubernetesJobGateway.requireJob(namespace, jobName);
         kubernetesJobGateway.patchSuspend(namespace, jobName, true);
@@ -118,16 +146,17 @@ public class JobControlService {
         }
         kubernetesJobGateway.waitForDeletion(namespace, jobName, deletionPollIntervalMillis, deletionMaxAttempts);
 
-        Job recreated = kubernetesJobGateway.createRestartedJob(existing, timeoutSeconds);
+        Job recreated = kubernetesJobGateway.createRestartedJob(existing, timeoutSeconds, parameters);
         kubernetesJobGateway.createJob(namespace, recreated);
 
         LOG.info(
-            "Restarted job {}/{} by delete/recreate. Deleted {} pod(s), timeoutSeconds={}, keepFailedPods={}",
+            "Restarted job {}/{} by delete/recreate. Deleted {} pod(s), timeoutSeconds={}, keepFailedPods={}, parameters={}",
             namespace,
             jobName,
             deletedPods,
             timeoutSeconds,
-            keepFailedPods
+            keepFailedPods,
+            parameters.keySet()
         );
         return action(namespace, jobName, "restart", "RUNNING", "Job recreated and started");
     }
@@ -266,6 +295,38 @@ public class JobControlService {
         if (timeoutSeconds != null && timeoutSeconds < 1) {
             throw new IllegalArgumentException("timeoutSeconds must be >= 1 when provided");
         }
+    }
+
+    private Map<String, String> normalizeParameters(List<JobParameterVO> parameters) {
+        if (parameters == null || parameters.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<String, String> normalized = new LinkedHashMap<>();
+        Set<String> duplicateGuard = new java.util.HashSet<>();
+        for (int i = 0; i < parameters.size(); i++) {
+            JobParameterVO parameter = parameters.get(i);
+            if (parameter == null) {
+                throw new IllegalArgumentException("parameters[" + i + "] must not be null");
+            }
+
+            String rawName = parameter.name();
+            String rawValue = parameter.value();
+            if (rawName == null || rawName.isBlank()) {
+                throw new IllegalArgumentException("parameters[" + i + "].name must not be blank");
+            }
+            if (rawValue == null) {
+                throw new IllegalArgumentException("parameters[" + i + "].value must not be null");
+            }
+
+            String name = rawName.trim();
+            if (!duplicateGuard.add(name)) {
+                throw new IllegalArgumentException("Duplicate parameter name: " + name);
+            }
+
+            normalized.put(name, rawValue);
+        }
+        return Map.copyOf(normalized);
     }
 
 }

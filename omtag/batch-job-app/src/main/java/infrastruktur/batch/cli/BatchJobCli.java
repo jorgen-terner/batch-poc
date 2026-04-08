@@ -1,6 +1,9 @@
 package infrastruktur.batch.cli;
 
 import infrastruktur.batch.model.ActionResponse;
+import infrastruktur.batch.model.JobParameterVO;
+import infrastruktur.batch.model.RestartJobRequestVO;
+import infrastruktur.batch.model.StartJobRequestVO;
 import infrastruktur.batch.model.JobMetricsResponse;
 import infrastruktur.batch.model.JobStatusResponse;
 import infrastruktur.batch.service.JobControlService;
@@ -20,6 +23,12 @@ import picocli.CommandLine.Parameters;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -92,6 +101,42 @@ public final class BatchJobCli implements Runnable {
         }
     }
 
+    private List<JobParameterVO> parseParameters(List<String> entries) {
+        if (entries == null || entries.isEmpty()) {
+            return null;
+        }
+
+        Map<String, String> deduplicated = new LinkedHashMap<>();
+        Set<String> duplicateGuard = new HashSet<>();
+        for (String entry : entries) {
+            if (entry == null || entry.isBlank()) {
+                throw new IllegalArgumentException("--parameter expects name=value");
+            }
+
+            int separatorIndex = entry.indexOf('=');
+            if (separatorIndex <= 0) {
+                throw new IllegalArgumentException("--parameter expects name=value, got: " + entry);
+            }
+
+            String name = entry.substring(0, separatorIndex).trim();
+            String value = entry.substring(separatorIndex + 1);
+            if (name.isBlank()) {
+                throw new IllegalArgumentException("--parameter name must not be blank");
+            }
+            if (!duplicateGuard.add(name)) {
+                throw new IllegalArgumentException("Duplicate parameter name: " + name);
+            }
+
+            deduplicated.put(name, value);
+        }
+
+        List<JobParameterVO> result = new ArrayList<>();
+        for (Map.Entry<String, String> entry : deduplicated.entrySet()) {
+            result.add(new JobParameterVO(entry.getKey(), entry.getValue()));
+        }
+        return result;
+    }
+
     @Command(name = "start", description = "Start a suspended Job")
     static final class StartCommand implements Callable<Integer> {
         @CommandLine.ParentCommand
@@ -103,9 +148,16 @@ public final class BatchJobCli implements Runnable {
         @Option(names = {"--timeout-seconds"}, description = "Optional max runtime (activeDeadlineSeconds)")
         private Long timeoutSeconds;
 
+        @Option(names = {"-p", "--parameter"}, description = "Job parameter as name=value (repeat option for multiple values)")
+        private List<String> parameters;
+
         @Override
         public Integer call() {
-            ActionResponse response = parent.service().start(parent.namespace, jobName, timeoutSeconds);
+            ActionResponse response = parent.service().start(
+                parent.namespace,
+                jobName,
+                new StartJobRequestVO(timeoutSeconds, parent.parseParameters(parameters))
+            );
             parent.printJson(response);
             return parent.exitCodeFromState(response.state());
         }
@@ -141,9 +193,16 @@ public final class BatchJobCli implements Runnable {
         @Option(names = {"--keep-failed-pods"}, defaultValue = "true", description = "Keep failed/succeeded pods for troubleshooting")
         private boolean keepFailedPods;
 
+        @Option(names = {"-p", "--parameter"}, description = "Job parameter as name=value (repeat option for multiple values)")
+        private List<String> parameters;
+
         @Override
         public Integer call() {
-            ActionResponse response = parent.service().restart(parent.namespace, jobName, timeoutSeconds, keepFailedPods);
+            ActionResponse response = parent.service().restart(
+                parent.namespace,
+                jobName,
+                new RestartJobRequestVO(timeoutSeconds, keepFailedPods, parent.parseParameters(parameters))
+            );
             parent.printJson(response);
             return parent.exitCodeFromState(response.state());
         }

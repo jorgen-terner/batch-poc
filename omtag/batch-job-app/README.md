@@ -211,29 +211,57 @@ REST-API:t är namespace-bundet per appinstans. Namespace läses från `BATCH_JO
 Anropa `status` för att följa körningen tills `SUCCEEDED` eller `FAILED`.
 
 Parametrar för `start` och `restart`:
-- Gemensam parameter: `timeoutSeconds` (HTTP) / `--timeout-seconds` (CLI), valfri. Sätts som `spec.activeDeadlineSeconds`.
-- Endast för `restart`: `keepFailedPods` (HTTP) / `--keep-failed-pods` (CLI), default `true`. Styr om terminala pods (`Failed`/`Succeeded`) behålls för felsökning.
+- Gemensamma body-fält: `timeoutSeconds` (valfri) och `parameters` (valfri lista med `{ "name": "...", "value": "..." }`).
+- Endast för `restart`: `keepFailedPods` i body, default `true`. Styr om terminala pods (`Failed`/`Succeeded`) behålls för felsökning.
+
+Validering av `parameters`:
+- `name` måste vara satt och får inte vara blankt.
+- `value` måste vara satt (`""` tom sträng är giltigt).
+- Dubbel `name` i samma request avvisas.
 
 ### Exempel anrop
 
 ```bash
-# Starta asynkront med timeout på 15 minuter
-curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/start?timeoutSeconds=900"
+# Starta asynkront med timeout och två namn-värde-parametrar
+curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/start" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timeoutSeconds": 900,
+    "parameters": [
+      {"name": "executionId", "value": "abc-123"},
+      {"name": "runType", "value": "FULL"}
+    ]
+  }'
 
-# Restart med timeout och behåll terminala pods
-curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/restart?timeoutSeconds=900&keepFailedPods=true"
+# Restart med timeout, behåll terminala pods och nya parametrar
+curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/restart" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timeoutSeconds": 900,
+    "keepFailedPods": true,
+    "parameters": [
+      {"name": "executionId", "value": "def-456"}
+    ]
+  }'
 
 # Restart och rensa alla pods
-curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/restart?keepFailedPods=false"
+curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/restart" \
+  -H "Content-Type: application/json" \
+  -d '{"keepFailedPods": false}'
 ```
 
 Motsvarande CLI-anrop:
 
 ```bash
 ./gradlew runCli --args="--namespace default start sample-batch-job --timeout-seconds 900"
+./gradlew runCli --args="--namespace default start sample-batch-job --timeout-seconds 900 --parameter executionId=abc-123 --parameter runType=FULL"
 ./gradlew runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true"
+./gradlew runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true --parameter executionId=def-456"
 ./gradlew runCli --args="--namespace default restart sample-batch-job --keep-failed-pods=false"
 ```
+
+`--parameter` kan anges flera gånger och ska ha formatet `name=value`.
+Dubbel parameternyckel i samma CLI-anrop avvisas.
 
 ### Pods vid felsökning
 
@@ -274,7 +302,8 @@ Tom report payload accepteras också och returnerar `REPORTED` utan att lagra ny
 
 1. Deployment innehåller ett Job med `suspend: true`.
 2. Klient anropar `start`.
-3. Appen patchar Job till `suspend: false`.
-4. Jobbet skickar frivillig rapport till `report`-endpoint under körning.
-5. Klient läser `status` och `metrics` tills terminal fas.
-6. Vid behov anropas `stop` eller `restart`.
+3. Om `parameters` saknas patchar appen Job till `suspend: false`.
+4. Om `parameters` finns recreatar appen Job för att applicera env-variabler i containern och startar det nya Jobbet.
+5. Jobbet skickar frivillig rapport till `report`-endpoint under körning.
+6. Klient läser `status` och `metrics` tills terminal fas.
+7. Vid behov anropas `stop` eller `restart`.

@@ -3,17 +3,17 @@ package infrastruktur.batch.api;
 import infrastruktur.batch.model.ActionResponse;
 import infrastruktur.batch.model.JobMetricsResponse;
 import infrastruktur.batch.model.JobReportRequest;
+import infrastruktur.batch.model.RestartJobRequestVO;
+import infrastruktur.batch.model.StartJobRequestVO;
 import infrastruktur.batch.model.JobStatusResponse;
 import infrastruktur.batch.service.JobControlService;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 
 import java.util.Map;
@@ -44,9 +44,9 @@ public class JobResource {
     @Path("api/v1/jobs/{jobName}/start")
     public ActionResponse start(
         @jakarta.ws.rs.PathParam("jobName") String jobName,
-        @QueryParam("timeoutSeconds") Long timeoutSeconds
+        StartJobRequestVO request
     ) {
-        return jobControlService.start(namespace, jobName, timeoutSeconds);
+        return jobControlService.start(namespace, jobName, request);
     }
 
     @POST
@@ -59,10 +59,9 @@ public class JobResource {
     @Path("api/v1/jobs/{jobName}/restart")
     public ActionResponse restart(
         @jakarta.ws.rs.PathParam("jobName") String jobName,
-        @QueryParam("timeoutSeconds") Long timeoutSeconds,
-        @QueryParam("keepFailedPods") @DefaultValue("true") boolean keepFailedPods
+        RestartJobRequestVO request
     ) {
-        return jobControlService.restart(namespace, jobName, timeoutSeconds, keepFailedPods);
+        return jobControlService.restart(namespace, jobName, request);
     }
 
     @GET

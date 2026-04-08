@@ -1,6 +1,8 @@
 package infrastruktur.batch.service;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
+import io.fabric8.kubernetes.api.model.EnvVar;
+import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.ManagedFieldsEntry;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
@@ -10,7 +12,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 @ApplicationScoped
@@ -44,6 +48,22 @@ public class KubernetesJobGateway {
             .withActiveDeadlineSeconds(timeoutSeconds)
             .endSpec()
             .build());
+    }
+
+    public void patchStartConfiguration(String namespace, String jobName, Long timeoutSeconds) {
+        client.batch().v1().jobs().inNamespace(namespace).withName(jobName).edit(j -> {
+            JobBuilder builder = new JobBuilder(j)
+                .editOrNewSpec()
+                .withSuspend(false)
+                .endSpec();
+
+            if (timeoutSeconds != null) {
+                builder.editOrNewSpec()
+                    .withActiveDeadlineSeconds(timeoutSeconds)
+                    .endSpec();
+            }
+            return builder.build();
+        });
     }
 
     public int deleteActivePods(String namespace, String jobName) {
@@ -103,9 +123,10 @@ public class KubernetesJobGateway {
         throw new IllegalStateException("Timed out waiting for Job deletion: " + namespace + "/" + jobName);
     }
 
-    public Job createRestartedJob(Job source, Long timeoutSeconds) {
+    public Job createRestartedJob(Job source, Long timeoutSeconds, Map<String, String> parameters) {
         String name = source.getMetadata().getName();
         String namespace = source.getMetadata().getNamespace();
+        List<EnvVar> existingEnv = getFirstContainerEnvOrThrow(source);
 
         JobBuilder builder = new JobBuilder(source)
             .editOrNewMetadata()
@@ -128,7 +149,53 @@ public class KubernetesJobGateway {
                 .endSpec();
         }
 
+        applyParametersToFirstContainer(builder, existingEnv, parameters);
+
         return builder.build();
+    }
+
+    private void applyParametersToFirstContainer(JobBuilder builder, List<EnvVar> existingEnv, Map<String, String> parameters) {
+        if (parameters == null || parameters.isEmpty()) {
+            return;
+        }
+
+        builder.editOrNewSpec()
+            .editOrNewTemplate()
+            .editOrNewSpec()
+            .editFirstContainer()
+            .withEnv(mergeEnvVars(existingEnv, parameters))
+            .endContainer()
+            .endSpec()
+            .endTemplate()
+            .endSpec();
+    }
+
+    private List<EnvVar> getFirstContainerEnvOrThrow(Job job) {
+        if (job.getSpec() == null
+            || job.getSpec().getTemplate() == null
+            || job.getSpec().getTemplate().getSpec() == null
+            || job.getSpec().getTemplate().getSpec().getContainers() == null
+            || job.getSpec().getTemplate().getSpec().getContainers().isEmpty()) {
+            throw new IllegalStateException("Job must define at least one container in spec.template.spec.containers");
+        }
+        return job.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv();
+    }
+
+    private List<EnvVar> mergeEnvVars(List<EnvVar> existingEnv, Map<String, String> parameters) {
+        Map<String, EnvVar> merged = new LinkedHashMap<>();
+        if (existingEnv != null) {
+            for (EnvVar envVar : existingEnv) {
+                if (envVar != null && envVar.getName() != null) {
+                    merged.put(envVar.getName(), envVar);
+                }
+            }
+        }
+
+        for (Map.Entry<String, String> entry : parameters.entrySet()) {
+            merged.put(entry.getKey(), new EnvVarBuilder().withName(entry.getKey()).withValue(entry.getValue()).build());
+        }
+
+        return new ArrayList<>(merged.values());
     }
 
     private void sleep(long millis) {
