@@ -38,7 +38,11 @@ public class JobHookLifecycle {
 
     void onStop(@Observes ShutdownEvent event) {
         try {
-            jobHookClient.invokeStop();
+            if (jobHookClient.shouldInvokeStopHook()) {
+                jobHookClient.invokeStop();
+            } else {
+                LOG.info("Skipping STOP hook based on STATUS response");
+            }
             if (stopWaitSeconds > 0) {
                 LOG.info("Waiting {} second(s) before shutdown completes", stopWaitSeconds);
                 Thread.sleep(stopWaitSeconds * 1000);
