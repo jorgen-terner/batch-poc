@@ -8,23 +8,28 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class JobHookClient {
     private static final Logger LOG = LoggerFactory.getLogger(JobHookClient.class);
+    private static final Pattern JSON_STATUS_PATTERN = Pattern.compile("\"status\"\\s*:\\s*\"([^\"]+)\"", Pattern.CASE_INSENSITIVE);
 
     private final String startUrl;
     private final String statusUrl;
     private final String stopUrl;
+    private final String execIdParamName;
     private final Duration httpTimeout;
-    private final boolean failOpenOnStatusError;
     private final HttpClient httpClient;
 
     private static final Set<String> BATCH_STATUS_VALUES = Set.of(
@@ -43,73 +48,80 @@ public class JobHookClient {
         @ConfigProperty(name = "job.hook.start-url") String startUrl,
         @ConfigProperty(name = "job.hook.status-url") String statusUrl,
         @ConfigProperty(name = "job.hook.stop-url") String stopUrl,
-        @ConfigProperty(name = "job.hook.http-timeout-seconds", defaultValue = "30") long httpTimeoutSeconds,
-        @ConfigProperty(name = "job.hook.fail-open-on-status-error", defaultValue = "true") boolean failOpenOnStatusError
+        @ConfigProperty(name = "job.hook.exec-id-param-name", defaultValue = "execId") String execIdParamName,
+        @ConfigProperty(name = "job.hook.http-timeout-seconds", defaultValue = "30") long httpTimeoutSeconds
     ) {
         if (httpTimeoutSeconds < 1) {
             throw new IllegalArgumentException("job.hook.http-timeout-seconds must be >= 1");
+        }
+        if (execIdParamName == null || execIdParamName.isBlank()) {
+            throw new IllegalArgumentException("job.hook.exec-id-param-name must not be blank");
         }
 
         this.startUrl = normalizeUrl(startUrl);
         this.statusUrl = normalizeUrl(statusUrl);
         this.stopUrl = normalizeUrl(stopUrl);
+        this.execIdParamName = execIdParamName.trim();
         this.httpTimeout = Duration.ofSeconds(httpTimeoutSeconds);
-        this.failOpenOnStatusError = failOpenOnStatusError;
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(this.httpTimeout)
             .build();
     }
 
-    public void invokeStart() {
+    public String invokeStartAndGetExecutionId() {
         if (startUrl == null) {
             throw new IllegalStateException("START environment variable must be configured");
         }
-        invokeRequiredUrl("START", startUrl);
+        HttpResponse<String> response = invokeRequiredUrl("START", startUrl);
+        String executionId = response.body() == null ? "" : response.body().trim();
+        if (executionId.isBlank()) {
+            throw new IllegalStateException("START hook returned empty executionId");
+        }
+        LOG.info("START hook returned executionId={}", executionId);
+        return executionId;
     }
 
-    public void invokeStop() {
+    public String fetchBatchStatus(String executionId) {
+        if (executionId == null || executionId.isBlank()) {
+            throw new IllegalArgumentException("executionId must not be blank");
+        }
+        if (statusUrl == null) {
+            throw new IllegalStateException("STATUS environment variable must be configured");
+        }
+
+        String urlWithExecId = appendQueryParam(statusUrl, execIdParamName, executionId);
+        HttpResponse<String> response = invokeRequiredUrl("STATUS", urlWithExecId);
+        String body = response.body() == null ? "" : response.body().trim();
+        if (body.isBlank()) {
+            throw new IllegalStateException("STATUS hook returned empty response");
+        }
+
+        return parseBatchStatus(body)
+            .orElseGet(() -> normalizeStatus(body));
+    }
+
+    public void invokeStop(String executionId) {
+        if (executionId == null || executionId.isBlank()) {
+            throw new IllegalArgumentException("executionId must not be blank");
+        }
         if (stopUrl == null) {
             LOG.warn("STOP environment variable is not configured, skipping stop hook");
             return;
         }
-        invokeRequiredUrl("STOP", stopUrl);
+
+        String urlWithExecId = appendQueryParam(stopUrl, execIdParamName, executionId);
+        invokeRequiredUrl("STOP", urlWithExecId);
     }
 
-    public boolean shouldInvokeStopHook() {
-        if (stopUrl == null) {
-            LOG.warn("STOP environment variable is not configured, stop hook will be skipped");
-            return false;
-        }
-
-        if (statusUrl == null) {
-            LOG.info("STATUS environment variable is not configured, invoking STOP by default");
-            return true;
-        }
-
-        try {
-            Optional<String> status = fetchBatchStatus();
-            if (status.isEmpty()) {
-                LOG.warn("Could not determine BatchStatus from STATUS response, failOpenOnStatusError={}", failOpenOnStatusError);
-                return failOpenOnStatusError;
-            }
-
-            String batchStatus = status.get();
-            boolean shouldInvoke = "STARTING".equals(batchStatus) || "STARTED".equals(batchStatus);
-            LOG.info("STATUS resolved to {}. invoke STOP={}", batchStatus, shouldInvoke);
-            return shouldInvoke;
-        } catch (RuntimeException ex) {
-            LOG.warn("STATUS hook call failed, failOpenOnStatusError={}", failOpenOnStatusError, ex);
-            return failOpenOnStatusError;
-        }
-    }
-
-    private void invokeRequiredUrl(String hookName, String url) {
+    private HttpResponse<String> invokeRequiredUrl(String hookName, String url) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
             .GET()
             .timeout(httpTimeout)
             .build();
 
-        LOG.info("Calling {} hook: {}", hookName, url);
+        String requestUrl = request.uri().toString();
+
+        LOG.info("Calling {} hook: {}", hookName, requestUrl);
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             int statusCode = response.statusCode();
@@ -119,6 +131,7 @@ public class JobHookClient {
                 );
             }
             LOG.info("{} hook completed with HTTP {}", hookName, statusCode);
+            return response;
         } catch (IOException ex) {
             throw new IllegalStateException(hookName + " hook call failed: " + ex.getMessage(), ex);
         } catch (InterruptedException ex) {
@@ -127,42 +140,50 @@ public class JobHookClient {
         }
     }
 
-    private Optional<String> fetchBatchStatus() {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(statusUrl))
-            .GET()
-            .timeout(httpTimeout)
-            .build();
-
-        LOG.info("Calling STATUS hook: {}", statusUrl);
-        try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            int statusCode = response.statusCode();
-            if (statusCode < 200 || statusCode > 299) {
-                throw new IllegalStateException("STATUS hook failed with HTTP " + statusCode + ": " + response.body());
-            }
-
-            String body = response.body() == null ? "" : response.body().trim();
-            return parseBatchStatus(body);
-        } catch (IOException ex) {
-            throw new IllegalStateException("STATUS hook call failed: " + ex.getMessage(), ex);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("STATUS hook call interrupted", ex);
-        }
-    }
-
     private Optional<String> parseBatchStatus(String rawResponse) {
         if (rawResponse == null || rawResponse.isBlank()) {
             return Optional.empty();
         }
 
-        String upper = rawResponse.toUpperCase(Locale.ROOT);
-        for (String candidate : BATCH_STATUS_VALUES) {
-            if (upper.contains(candidate)) {
-                return Optional.of(candidate);
+        String upper = normalizeStatus(rawResponse);
+
+        if (BATCH_STATUS_VALUES.contains(upper)) {
+            return Optional.of(upper);
+        }
+
+        Matcher jsonStatusMatcher = JSON_STATUS_PATTERN.matcher(rawResponse);
+        if (jsonStatusMatcher.find()) {
+            String parsedJsonStatus = normalizeStatus(jsonStatusMatcher.group(1));
+            if (BATCH_STATUS_VALUES.contains(parsedJsonStatus)) {
+                return Optional.of(parsedJsonStatus);
+            }
+        }
+
+        // Fallback: allow exact token matches from a structured plain-text payload.
+        String[] tokens = upper.split("[^A-Z_]+");
+        for (String token : tokens) {
+            if (BATCH_STATUS_VALUES.contains(token)) {
+                return Optional.of(token);
             }
         }
         return Optional.empty();
+    }
+
+    private String normalizeStatus(String rawStatus) {
+        String normalized = rawStatus == null ? "" : rawStatus.trim();
+        if (normalized.length() >= 2 && normalized.startsWith("\"") && normalized.endsWith("\"")) {
+            normalized = normalized.substring(1, normalized.length() - 1).trim();
+        }
+        return normalized.toUpperCase(Locale.ROOT);
+    }
+
+    private String appendQueryParam(String baseUrl, String paramName, String paramValue) {
+        String separator = baseUrl.contains("?") ? "&" : "?";
+        return baseUrl
+            + separator
+            + URLEncoder.encode(paramName, StandardCharsets.UTF_8)
+            + "="
+            + URLEncoder.encode(paramValue, StandardCharsets.UTF_8);
     }
 
     private String normalizeUrl(String url) {

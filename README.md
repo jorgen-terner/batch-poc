@@ -307,7 +307,7 @@ Se [Helm Chart README](../helm/inf-batch-job/README.md) för Kubernetes-specifik
 Applikationen loggar till stdout i JSON-format för enkel integration med Kubernetes logging-system.
 
 ```bash
-kubectl logs -f deployment/inf-batch-job
+oc logs -f deployment/inf-batch-job
 ```
 
 ### Memory/CPU issues

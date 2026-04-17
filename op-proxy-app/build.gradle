@@ -1,0 +1,60 @@
+plugins {
+    id 'java'
+    id 'io.quarkus' version "${quarkusPluginVersion}"
+}
+
+group = 'infrastruktur.batch'
+version = '0.1.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    implementation enforcedPlatform("${quarkusPlatformGroupId}:${quarkusPlatformArtifactId}:${quarkusPlatformVersion}")
+    implementation 'io.quarkus:quarkus-arc'
+    implementation 'io.quarkus:quarkus-rest-jackson'
+    implementation 'io.quarkus:quarkus-smallrye-health'
+
+    implementation 'io.fabric8:kubernetes-client:7.6.1'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2'
+    implementation 'info.picocli:picocli:4.7.6'
+
+    implementation 'org.slf4j:slf4j-api:2.0.13'
+
+    testImplementation 'io.quarkus:quarkus-junit5'
+    testImplementation 'io.rest-assured:rest-assured'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+}
+
+tasks.register('runCli', JavaExec) {
+    group = 'application'
+    description = 'Run the batch-job CLI'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'infrastruktur.batch.cli.BatchJobCli'
+    jvmArgs '-Djava.util.logging.manager=org.jboss.logmanager.LogManager'
+
+    // CLI använder exit-koder för tillstånd, inte bara för fel.
+    // Tillåt alla dokumenterade koder och faila bara på oväntade värden.
+    ignoreExitValue = true
+    doLast {
+        def exitValue = executionResult.get().exitValue
+        def acceptedExitCodes = [0, 2, 3, 4, 10, 124]
+        if (!acceptedExitCodes.contains(exitValue)) {
+            throw new RuntimeException("runCli failed with exit code ${exitValue}")
+        }
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

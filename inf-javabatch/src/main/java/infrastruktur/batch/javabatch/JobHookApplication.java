@@ -13,7 +13,6 @@ public class JobHookApplication implements QuarkusApplication {
 
     @Override
     public int run(String... args) throws InterruptedException {
-        lifecycle.awaitShutdown();
-        return 0;
+        return lifecycle.runToCompletion();
     }
 }

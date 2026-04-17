@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: inv-javabatch-suspended
+  labels:
+    app: inv-javabatch
+spec:
+  suspend: true
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: inv-javabatch
+    spec:
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: inv-javabatch
+          image: image-registry.openshift-image-registry.svc:5000/dev252/inv-javabatch:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: inv-javabatch-config
+          env:
+            - name: JOB_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace

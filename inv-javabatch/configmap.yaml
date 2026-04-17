@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: inv-javabatch-config
+  labels:
+    app: inv-javabatch
+data:
+  # Mandatory hook called when the container starts.
+  # Response body must contain executionId.
+  START: "http://inf-batch-job-app:8080/batch/start"
+
+  # Mandatory status endpoint, called repeatedly as:
+  # STATUS?execId=<executionId>
+  STATUS: "http://inf-batch-job-app:8080/batch/status"
+
+  # Optional stop endpoint, called during shutdown as:
+  # STOP?execId=<executionId>
+  STOP: "http://inf-batch-job-app:8080/batch/stop"
+
+  # Request param name for execution id.
+  EXEC_ID_PARAM_NAME: "execId"
+
+  # Per-hook timeout in seconds.
+  HTTP_TIMEOUT_SECONDS: "30"
+
+  # Status polling interval in seconds.
+  STATUS_POLL_INTERVAL_SECONDS: "5"
+
+  # Maximum total poll duration in seconds.
+  MAX_POLL_SECONDS: "3600"
+
+  # Wait time after STOP call before process exits.
+  STOP_WAIT_SECONDS: "15"
+
+  # If STATUS fails, continue polling when true.
+  FAIL_OPEN_ON_STATUS_ERROR: "true"
+
+  # Maximum number of consecutive STATUS failures before failing the Job.
+  MAX_STATUS_ERROR_RETRIES: "12"
+
+  # Maximum number of consecutive unknown STATUS values before failing the Job.
+  MAX_UNKNOWN_STATUS_RETRIES: "12"
+
+  # Configure how status values are interpreted.
+  ACTIVE_STATUS_VALUES: "STARTING,STARTED,STOPPING"
+  SUCCESS_STATUS_VALUES: "COMPLETED"
+  FAILURE_STATUS_VALUES: "FAILED,ABANDONED,UNKNOWN,STOPPED"
+
+  # Optional extra JVM flags.
+  JAVA_OPTS: "-Djava.util.logging.manager=org.jboss.logmanager.LogManager"
