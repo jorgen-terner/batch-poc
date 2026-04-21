@@ -165,9 +165,58 @@ oc -n production scale deployment/op-proxy-app --replicas=2
 
 CLI:t använder samma JobControlService som HTTP-API:t, men utan HTTP-lager.
 
-## Design for template-baserat API (v2)
+## Template-baserat API (v2)
 
-Se [TEMPLATE-RUN-API-RFC.md](TEMPLATE-RUN-API-RFC.md) for konkret forslag med endpoints, VO-kontrakt, klassuppdelning och migreringsplan bort fran suspended Jobs.
+Utöver legacy-API:t för suspended Jobs finns nu ett separat v2-API för template-baserade körningar i OpenShift/Kubernetes.
+
+Flödet utgår från ett existerande template-Job i klustret. När klienten skapar en run kopierar op-proxy-app template-jobbet, sätter ett nytt servergenererat `runName`, applicerar eventuella parametrar som env-variabler och skapar ett nytt Job.
+
+Se [TEMPLATE-RUN-API-RFC.md](TEMPLATE-RUN-API-RFC.md) för bakgrund och migreringsidéer. README:n nedan beskriver den aktuella implementationen.
+
+### HTTP-endpoints (v2)
+
+- `POST /api/v2/templates/{templateName}/runs`
+- `GET /api/v2/runs/{runName}`
+- `POST /api/v2/runs/{runName}/cancel`
+
+### Kontrakt
+
+Create-run request:
+- `clientRequestId`: valfri korrelationsnyckel från klienten
+- `timeoutSeconds`: valfri timeout som sätts som `activeDeadlineSeconds`
+- `parameters`: valfri lista av `name/value` som skrivs till första containerns env-variabler
+
+Create/cancel response (`RunActionResponseVO`) innehåller `namespace`, `templateName`, `runName`, `clientRequestId`, `action`, `state`, `message` och `createdAt`.
+
+Status response (`RunStatusResponseVO`) innehåller `namespace`, `templateName`, `runName`, `phase`, pod-räknare och tidsfält.
+
+`runName` skickas inte in av klienten. Det genereras alltid av servern och används sedan för status- och cancel-anrop.
+
+Validering av `parameters` i v2:
+- `name` måste vara satt och får inte vara blankt
+- `value` måste vara satt (`""` tom sträng är giltigt)
+- Dubbel `name` i samma request avvisas
+
+Cancel request:
+- `deletePods=true`: radera både Job och tillhörande pods
+- `deletePods=false` eller tom body: radera Job men behåll pods
+
+### Flöde i v2
+
+1. Klienten anropar `POST /api/v2/templates/{templateName}/runs`.
+2. op-proxy-app läser template-jobbet i samma namespace.
+3. Ett nytt `runName` genereras av servern.
+4. Ett nytt Job skapas från template-jobbet med labels för template och run.
+5. Klienten följer körningen via `GET /api/v2/runs/{runName}`.
+6. Vid behov avbryts körningen via `POST /api/v2/runs/{runName}/cancel`.
+
+### Telemetri för v2
+
+op-proxy-app exponerar inte längre endpoints för att läsa metrics eller ta emot explicita report-anrop.
+I stället skickar service-lagret generella Job/Run-händelser till en intern `JobMetricsReporter`.
+Just nu loggas dessa händelser via `slf4j`, vilket gör att formatet kan verifieras innan en extern produkt kopplas in.
+
+## Legacy API (v1 suspended Jobs)
 
 ### HTTP-endpoints
 
@@ -178,10 +227,9 @@ Se [TEMPLATE-RUN-API-RFC.md](TEMPLATE-RUN-API-RFC.md) for konkret forslag med en
 
 REST-API:t är namespace-bundet per appinstans. Namespace läses från `BATCH_JOB_NAMESPACE` och sätts automatiskt från poddens eget namespace i OpenShift-deploymenten.
 
-### Asynkront start-anrop
+### Kort om v1
 
-`start` unsuspendar Jobbet och returnerar direkt.
-Anropa `status` för att följa körningen tills `SUCCEEDED` eller `FAILED`.
+`start` unsuspendar Jobbet och returnerar direkt. Klienten följer sedan körningen via `status` tills `SUCCEEDED` eller `FAILED`.
 
 Parametrar för `start` och `restart`:
 - Gemensamma body-fält: `timeoutSeconds` (valfri) och `parameters` (valfri lista med `{ "name": "...", "value": "..." }`).
@@ -191,37 +239,6 @@ Validering av `parameters`:
 - `name` måste vara satt och får inte vara blankt.
 - `value` måste vara satt (`""` tom sträng är giltigt).
 - Dubbel `name` i samma request avvisas.
-
-### Exempel anrop
-
-```bash
-# Starta asynkront med timeout och två namn-värde-parametrar
-curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/start" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "timeoutSeconds": 900,
-    "parameters": [
-      {"name": "runType", "value": "FULL"},
-      {"name": "businessDate", "value": "2026-04-17"}
-    ]
-  }'
-
-# Restart med timeout, behåll terminala pods och nya parametrar
-curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/restart" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "timeoutSeconds": 900,
-    "keepFailedPods": true,
-    "parameters": [
-      {"name": "runType", "value": "REPROCESS"}
-    ]
-  }'
-
-# Restart och rensa alla pods
-curl -X POST "http://localhost:8080/api/v1/jobs/sample-batch-job/restart" \
-  -H "Content-Type: application/json" \
-  -d '{"keepFailedPods": false}'
-```
 
 ### CLI-API
 
@@ -256,12 +273,3 @@ Exit-koder (CI/CD):
 
 Vid `stop` rensas endast aktiva pods.
 Vid `restart` styr `keepFailedPods` om terminala pods (`Failed`/`Succeeded`) ska behållas (`true`) eller rensas (`false`).
-
-## Exempel flöde
-
-1. Deployment innehåller ett Job med `suspend: true`.
-2. Klient anropar `start`.
-3. Om `parameters` saknas patchar appen Job till `suspend: false`.
-4. Om `parameters` finns recreatar appen Job för att applicera env-variabler i containern och startar det nya Jobbet.
-5. Klient läser `status` tills terminal fas.
-6. Vid behov anropas `stop` eller `restart`.
