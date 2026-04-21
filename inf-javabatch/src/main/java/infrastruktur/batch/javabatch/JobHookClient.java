@@ -70,7 +70,7 @@ public class JobHookClient {
 
     public String invokeStartAndGetExecutionId() {
         if (startUrl == null) {
-            throw new IllegalStateException("START environment variable must be configured");
+            throw new IllegalStateException("Missing required config: job.hook.start-url");
         }
         HttpResponse<String> response = invokeRequiredUrl("START", startUrl);
         String executionId = response.body() == null ? "" : response.body().trim();
@@ -86,7 +86,7 @@ public class JobHookClient {
             throw new IllegalArgumentException("executionId must not be blank");
         }
         if (statusUrl == null) {
-            throw new IllegalStateException("STATUS environment variable must be configured");
+            throw new IllegalStateException("Missing required config: job.hook.status-url");
         }
 
         String urlWithExecId = appendQueryParam(statusUrl, execIdParamName, executionId);
@@ -105,7 +105,7 @@ public class JobHookClient {
             throw new IllegalArgumentException("executionId must not be blank");
         }
         if (stopUrl == null) {
-            LOG.warn("STOP environment variable is not configured, skipping stop hook");
+            LOG.warn("Config 'job.hook.stop-url' is not configured, skipping stop hook");
             return;
         }
 

@@ -4,7 +4,6 @@ import infrastruktur.batch.model.ActionResponse;
 import infrastruktur.batch.model.JobParameterVO;
 import infrastruktur.batch.model.RestartJobRequestVO;
 import infrastruktur.batch.model.StartJobRequestVO;
-import infrastruktur.batch.model.JobMetricsResponse;
 import infrastruktur.batch.model.JobStatusResponse;
 import infrastruktur.batch.service.JobControlService;
 import infrastruktur.batch.service.JobPhaseResolver;
@@ -38,8 +37,7 @@ import java.util.concurrent.Callable;
         BatchJobCli.StartCommand.class,
         BatchJobCli.StopCommand.class,
         BatchJobCli.RestartCommand.class,
-        BatchJobCli.StatusCommand.class,
-        BatchJobCli.MetricsCommand.class
+        BatchJobCli.StatusCommand.class
     }
 )
 public final class BatchJobCli implements Runnable {
@@ -255,22 +253,6 @@ public final class BatchJobCli implements Runnable {
 
                 parent.sleep(intervalSeconds * 1000);
             }
-        }
-    }
-
-    @Command(name = "metrics", description = "Get Job metrics")
-    static final class MetricsCommand implements Callable<Integer> {
-        @CommandLine.ParentCommand
-        private BatchJobCli parent;
-
-        @Parameters(index = "0", description = "Job name")
-        private String jobName;
-
-        @Override
-        public Integer call() {
-            JobMetricsResponse metrics = parent.service().metrics(parent.namespace, jobName);
-            parent.printJson(metrics);
-            return parent.exitCodeFromPhase(metrics.phase());
         }
     }
 

@@ -20,6 +20,9 @@ import java.util.NoSuchElementException;
 
 @ApplicationScoped
 public class KubernetesJobGateway {
+    public static final String TEMPLATE_NAME_LABEL = "batch.template-name";
+    public static final String RUN_NAME_LABEL = "batch.run-name";
+
     private static final List<String> RECREATED_TEMPLATE_LABEL_KEYS_TO_REMOVE = List.of(
         "controller-uid",
         "batch.kubernetes.io/controller-uid",
@@ -162,6 +165,47 @@ public class KubernetesJobGateway {
         return builder.build();
     }
 
+    public void createRunFromTemplate(String namespace, String templateName, String runName, Long timeoutSeconds, Map<String, String> parameters) {
+        Job templateJob = requireJob(namespace, templateName);
+        List<EnvVar> existingEnv = getFirstContainerEnvOrThrow(templateJob);
+        Map<String, String> runLabels = sanitizeTemplateLabels(templateJob);
+        runLabels.put(TEMPLATE_NAME_LABEL, templateName);
+        runLabels.put(RUN_NAME_LABEL, runName);
+
+        JobBuilder builder = new JobBuilder(templateJob)
+            .editOrNewMetadata()
+            .withName(runName)
+            .withNamespace(namespace)
+            .withResourceVersion(null)
+            .withUid(null)
+            .withCreationTimestamp(null)
+            .withGeneration(null)
+            .withManagedFields((List<ManagedFieldsEntry>) null)
+            .addToLabels(TEMPLATE_NAME_LABEL, templateName)
+            .addToLabels(RUN_NAME_LABEL, runName)
+            .endMetadata()
+            .withStatus(null)
+            .editOrNewSpec()
+            .withSelector(null)
+            .withManualSelector(null)
+            .withSuspend(false)
+            .editOrNewTemplate()
+            .editOrNewMetadata()
+            .withLabels(runLabels)
+            .endMetadata()
+            .endTemplate()
+            .endSpec();
+
+        if (timeoutSeconds != null) {
+            builder.editOrNewSpec()
+                .withActiveDeadlineSeconds(timeoutSeconds)
+                .endSpec();
+        }
+
+        applyParametersToFirstContainer(builder, existingEnv, parameters);
+        createJob(namespace, builder.build());
+    }
+
     private Map<String, String> sanitizeTemplateLabels(Job source) {
         Map<String, String> labels = source.getSpec() != null
             && source.getSpec().getTemplate() != null
@@ -200,7 +244,8 @@ public class KubernetesJobGateway {
             || job.getSpec().getTemplate().getSpec().getContainers().isEmpty()) {
             throw new IllegalStateException("Job must define at least one container in spec.template.spec.containers");
         }
-        return job.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv();
+        List<EnvVar> env = job.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv();
+        return env != null ? env : new ArrayList<>();
     }
 
     private List<EnvVar> mergeEnvVars(List<EnvVar> existingEnv, Map<String, String> parameters) {

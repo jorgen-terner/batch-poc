@@ -1,8 +1,6 @@
 package infrastruktur.batch.api;
 
 import infrastruktur.batch.model.ActionResponse;
-import infrastruktur.batch.model.JobMetricsResponse;
-import infrastruktur.batch.model.JobReportRequest;
 import infrastruktur.batch.model.RestartJobRequestVO;
 import infrastruktur.batch.model.StartJobRequestVO;
 import infrastruktur.batch.model.JobStatusResponse;
@@ -70,18 +68,4 @@ public class JobResource {
         return jobControlService.status(namespace, jobName);
     }
 
-    @GET
-    @Path("api/v1/jobs/{jobName}/metrics")
-    public JobMetricsResponse metrics(@jakarta.ws.rs.PathParam("jobName") String jobName) {
-        return jobControlService.metrics(namespace, jobName);
-    }
-
-    @POST
-    @Path("api/v1/jobs/{jobName}/report")
-    public ActionResponse report(
-        @jakarta.ws.rs.PathParam("jobName") String jobName,
-        JobReportRequest request
-    ) {
-        return jobControlService.report(namespace, jobName, request);
-    }
 }

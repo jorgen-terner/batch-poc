@@ -165,14 +165,16 @@ oc -n production scale deployment/op-proxy-app --replicas=2
 
 CLI:t använder samma JobControlService som HTTP-API:t, men utan HTTP-lager.
 
+## Design for template-baserat API (v2)
+
+Se [TEMPLATE-RUN-API-RFC.md](TEMPLATE-RUN-API-RFC.md) for konkret forslag med endpoints, VO-kontrakt, klassuppdelning och migreringsplan bort fran suspended Jobs.
+
 ### HTTP-endpoints
 
 - `POST /api/v1/jobs/{jobName}/start` (asynkront)
 - `POST /api/v1/jobs/{jobName}/stop`
 - `POST /api/v1/jobs/{jobName}/restart`
 - `GET /api/v1/jobs/{jobName}/status`
-- `GET /api/v1/jobs/{jobName}/metrics`
-- `POST /api/v1/jobs/{jobName}/report`
 
 REST-API:t är namespace-bundet per appinstans. Namespace läses från `BATCH_JOB_NAMESPACE` och sätts automatiskt från poddens eget namespace i OpenShift-deploymenten.
 
@@ -255,42 +257,11 @@ Exit-koder (CI/CD):
 Vid `stop` rensas endast aktiva pods.
 Vid `restart` styr `keepFailedPods` om terminala pods (`Failed`/`Succeeded`) ska behållas (`true`) eller rensas (`false`).
 
-### Report payload (från Job till appen)
-
-`report` är frivillig och används för att skicka statistik vidare till extern lagring.
-Job-status och grundmetrics hämtas från Kubernetes Job/Pod-status, och `report` påverkar inte `phase`.
-
-Om `report` saknas helt fungerar `status` och `metrics` ändå, och appen använder då Kubernetes-data (bland annat exit code när den finns).
-
-```json
-{
-  "status": "RUNNING",
-  "metrics": {
-    "recordsProcessed": 1234,
-    "errorCount": 0
-  },
-  "attributes": {
-    "sourceSystem": "inf-batch-job"
-  }
-}
-```
-
-Minimal report (också giltig):
-
-```json
-{
-  "status": "SUCCEEDED"
-}
-```
-
-Tom report payload accepteras också och returnerar `REPORTED`.
-
 ## Exempel flöde
 
 1. Deployment innehåller ett Job med `suspend: true`.
 2. Klient anropar `start`.
 3. Om `parameters` saknas patchar appen Job till `suspend: false`.
 4. Om `parameters` finns recreatar appen Job för att applicera env-variabler i containern och startar det nya Jobbet.
-5. Jobbet kan frivilligt skicka statistik till `report`-endpoint under körning.
-6. Klient läser `status` och `metrics` tills terminal fas.
-7. Vid behov anropas `stop` eller `restart`.
+5. Klient läser `status` tills terminal fas.
+6. Vid behov anropas `stop` eller `restart`.

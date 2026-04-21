@@ -2,13 +2,14 @@ package infrastruktur.batch.model;
 
 import java.time.Instant;
 
-public record JobMetricsResponse(
+public record RunStatusResponseVO(
     String namespace,
-    String jobName,
+    String templateName,
+    String runName,
     String phase,
-    int podCount,
-    int totalContainerRestarts,
-    Integer lastExitCode,
+    int activePods,
+    int succeededPods,
+    int failedPods,
     Instant startTime,
     Instant completionTime,
     Long elapsedSeconds
