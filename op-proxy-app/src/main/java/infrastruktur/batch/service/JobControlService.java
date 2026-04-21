@@ -1,5 +1,6 @@
 package infrastruktur.batch.service;
 
+import infrastruktur.batch.metrics.JobMetricsReporter;
 import infrastruktur.batch.model.ActionResponse;
 import infrastruktur.batch.model.JobStatusResponse;
 import infrastruktur.batch.model.RestartJobRequestVO;
@@ -22,6 +23,7 @@ public class JobControlService {
     private static final long DEFAULT_DELETION_POLL_INTERVAL_MILLIS = 1000L;
     private static final int DEFAULT_DELETION_MAX_ATTEMPTS = 30;
 
+    private final JobMetricsReporter jobMetricsReporter;
     private final KubernetesJobGateway kubernetesJobGateway;
     private final JobPhaseResolver jobPhaseResolver;
     private final long deletionPollIntervalMillis;
@@ -29,11 +31,13 @@ public class JobControlService {
 
     @Inject
     public JobControlService(
+        JobMetricsReporter jobMetricsReporter,
         KubernetesJobGateway kubernetesJobGateway,
         JobPhaseResolver jobPhaseResolver,
         @ConfigProperty(name = "batch.job.deletion.poll-interval-millis", defaultValue = "1000") long deletionPollIntervalMillis,
         @ConfigProperty(name = "batch.job.deletion.max-attempts", defaultValue = "30") int deletionMaxAttempts
     ) {
+        this.jobMetricsReporter = jobMetricsReporter;
         this.kubernetesJobGateway = kubernetesJobGateway;
         this.jobPhaseResolver = jobPhaseResolver;
         if (deletionPollIntervalMillis < 1) {
@@ -48,6 +52,8 @@ public class JobControlService {
 
     public JobControlService(KubernetesClient client) {
         this(
+            (namespace, scope, name, status, metrics, attributes) -> {
+            },
             new KubernetesJobGateway(client),
             new JobPhaseResolver(),
             DEFAULT_DELETION_POLL_INTERVAL_MILLIS,
@@ -64,7 +70,9 @@ public class JobControlService {
             kubernetesJobGateway.requireJob(namespace, jobName);
             kubernetesJobGateway.patchStartConfiguration(namespace, jobName, timeoutSeconds);
             LOG.info("Started job {}/{} by unsuspending (timeoutSeconds={})", namespace, jobName, timeoutSeconds);
-            return action(namespace, jobName, "start", "RUNNING", "Job unsuspended");
+            ActionResponse response = action(namespace, jobName, "start", "RUNNING", "Job unsuspended");
+            reportAction(namespace, jobName, response, Map.of());
+            return response;
         }
 
         Job existing = kubernetesJobGateway.requireJob(namespace, jobName);
@@ -84,7 +92,9 @@ public class JobControlService {
             timeoutSeconds,
             parameters.keySet()
         );
-        return action(namespace, jobName, "start", "RUNNING", "Job recreated and started");
+        ActionResponse response = action(namespace, jobName, "start", "RUNNING", "Job recreated and started");
+        reportAction(namespace, jobName, response, Map.of("deletedPods", (double) deletedPods));
+        return response;
     }
 
     public ActionResponse stop(String namespace, String jobName) {
@@ -93,7 +103,9 @@ public class JobControlService {
         int deletedPods = kubernetesJobGateway.deleteActivePods(namespace, jobName);
 
         LOG.info("Stopped job {}/{} and deleted {} active pod(s)", namespace, jobName, deletedPods);
-        return action(namespace, jobName, "stop", "SUSPENDED", "Job suspended and active pods deleted: " + deletedPods);
+        ActionResponse response = action(namespace, jobName, "stop", "SUSPENDED", "Job suspended and active pods deleted: " + deletedPods);
+        reportAction(namespace, jobName, response, Map.of("deletedPods", (double) deletedPods));
+        return response;
     }
 
     public ActionResponse restart(String namespace, String jobName, RestartJobRequestVO request) {
@@ -127,7 +139,9 @@ public class JobControlService {
             keepFailedPods,
             parameters.keySet()
         );
-        return action(namespace, jobName, "restart", "RUNNING", "Job recreated and started");
+        ActionResponse response = action(namespace, jobName, "restart", "RUNNING", "Job recreated and started");
+        reportAction(namespace, jobName, response, Map.of("deletedPods", (double) deletedPods));
+        return response;
     }
 
     public JobStatusResponse status(String namespace, String jobName) {
@@ -163,6 +177,16 @@ public class JobControlService {
         return new ActionResponse(namespace, jobName, action, state, message, Instant.now());
     }
 
+    private void reportAction(String namespace, String jobName, ActionResponse response, Map<String, Double> metrics) {
+        jobMetricsReporter.report(
+            namespace,
+            "JOB",
+            jobName,
+            response.state(),
+            metrics,
+            Map.of("action", response.action())
+        );
+    }
 
 }
 

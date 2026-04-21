@@ -1,5 +1,6 @@
 package infrastruktur.batch.service;
 
+import infrastruktur.batch.metrics.JobMetricsReporter;
 import infrastruktur.batch.model.CancelRunRequestVO;
 import infrastruktur.batch.model.CreateRunRequestVO;
 import infrastruktur.batch.model.RunActionResponseVO;
@@ -23,14 +24,17 @@ public class TemplateRunService {
 
     private final KubernetesJobGateway kubernetesJobGateway;
     private final JobPhaseResolver jobPhaseResolver;
+    private final JobMetricsReporter jobMetricsReporter;
 
     @Inject
     public TemplateRunService(
         KubernetesJobGateway kubernetesJobGateway,
-        JobPhaseResolver jobPhaseResolver
+        JobPhaseResolver jobPhaseResolver,
+        JobMetricsReporter jobMetricsReporter
     ) {
         this.kubernetesJobGateway = kubernetesJobGateway;
         this.jobPhaseResolver = jobPhaseResolver;
+        this.jobMetricsReporter = jobMetricsReporter;
     }
 
     public RunActionResponseVO createRun(String namespace, String templateName, CreateRunRequestVO request) {
@@ -51,7 +55,7 @@ public class TemplateRunService {
             timeoutSeconds,
             parameters.keySet());
 
-        return new RunActionResponseVO(
+        RunActionResponseVO response = new RunActionResponseVO(
             namespace,
             templateName,
             runName,
@@ -61,6 +65,8 @@ public class TemplateRunService {
             "Run created",
             Instant.now()
         );
+        reportRunAction(namespace, templateName, runName, response, Map.of());
+        return response;
     }
 
     public RunStatusResponseVO status(String namespace, String runName) {
@@ -99,12 +105,16 @@ public class TemplateRunService {
             int deletedPods = kubernetesJobGateway.deletePods(namespace, runName);
             kubernetesJobGateway.deleteJob(namespace, runName);
             LOG.info("Cancelled run {}/{} and deleted {} pod(s)", namespace, runName, deletedPods);
-            return action(namespace, resolveTemplateName(runJob), runName, "cancel", "CANCELLED", "Run cancelled and pods deleted");
+            RunActionResponseVO response = action(namespace, resolveTemplateName(runJob), runName, "cancel", "CANCELLED", "Run cancelled and pods deleted");
+            reportRunAction(namespace, response.templateName(), runName, response, Map.of("deletedPods", (double) deletedPods));
+            return response;
         }
 
         kubernetesJobGateway.deleteJobPreservingPods(namespace, runName);
         LOG.info("Cancelled run {}/{} and preserved pods", namespace, runName);
-        return action(namespace, resolveTemplateName(runJob), runName, "cancel", "CANCELLED", "Run cancelled and pods preserved");
+        RunActionResponseVO response = action(namespace, resolveTemplateName(runJob), runName, "cancel", "CANCELLED", "Run cancelled and pods preserved");
+        reportRunAction(namespace, response.templateName(), runName, response, Map.of());
+        return response;
     }
 
     private RunActionResponseVO action(
@@ -124,6 +134,26 @@ public class TemplateRunService {
             state,
             message,
             Instant.now()
+        );
+    }
+
+    private void reportRunAction(
+        String namespace,
+        String templateName,
+        String runName,
+        RunActionResponseVO response,
+        Map<String, Double> metrics
+    ) {
+        jobMetricsReporter.report(
+            namespace,
+            "RUN",
+            runName,
+            response.state(),
+            metrics,
+            Map.of(
+                "action", response.action(),
+                "templateName", templateName
+            )
         );
     }
 
