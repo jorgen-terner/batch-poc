@@ -8,6 +8,7 @@ Imagen byggs med Quarkus fast-jar-artifakter producerade av modulen `inf-javabat
 - `Dockerfile` - bygger runtime-image och kopierar Quarkus-artifakter från `inf-javabatch/build/quarkus-app`.
 - `configmap.yaml` - sätter miljövariabler enligt README för `inf-javabatch`.
 - `job.yaml` - suspended Job-mall som laddar miljövariabler via ConfigMap.
+- `template.yaml` - OpenShift Template som skapar ett suspended template-Job för op-proxy-app v2.
 
 ## 1. Bygg Quarkus-artifakter
 
@@ -37,6 +38,49 @@ Om BuildConfig redan finns kan du hoppa över `oc new-build`.
 Sätt alltid `image` i `job.yaml` till OpenShifts interna registry, till exempel:
 `image-registry.openshift-image-registry.svc:5000/dev252/inv-javabatch:latest`
 Byt `dev252` till ditt namespace.
+
+## 3. Skapa template-jobb for op-proxy-app v2
+
+`op-proxy-app` v2 (`POST /api/v2/templates/{templateName}/runs`) klonar ett befintligt Job i samma namespace.
+Anvand `template.yaml` for att skapa detta template-Job.
+
+Applicera och processa templaten:
+
+```bash
+oc apply -f inv-javabatch/template.yaml
+
+oc process inv-javabatch-template \
+  -p NAMESPACE=dev252 \
+  -p TEMPLATE_JOB_NAME=inv-javabatch-suspended \
+  -p IMAGE=image-registry.openshift-image-registry.svc:5000/dev252/inv-javabatch:latest \
+  -p CONFIGMAP_NAME=inv-javabatch-config \
+  | oc apply -f -
+```
+
+Verifiera template-jobbet:
+
+```bash
+oc get job inv-javabatch-suspended -n dev252
+oc get job inv-javabatch-suspended -n dev252 -o jsonpath='{.spec.suspend}'
+```
+
+Forvanta `true` pa `spec.suspend` for template-jobbet.
+
+Exempel: skapa korning via op-proxy-app v2
+
+```bash
+curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-suspended/runs" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientRequestId": "inv-4711",
+    "timeoutSeconds": 900,
+    "parameters": [
+      {"name": "START", "value": "https://example/start"}
+    ]
+  }'
+```
+
+`templateName` i v2-anropet maste matcha `TEMPLATE_JOB_NAME`.
 
 ### Spara imagen från garbage collection
 

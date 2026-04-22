@@ -1,0 +1,54 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: inv-javabatch-template
+  annotations:
+    description: "Template Job for op-proxy-app v2 create-run"
+parameters:
+  - name: NAMESPACE
+    description: "OpenShift namespace where template Job is created"
+    value: dev252
+  - name: TEMPLATE_JOB_NAME
+    description: "Name used as templateName in /api/v2/templates/{templateName}/runs"
+    value: inv-javabatch-suspended
+  - name: IMAGE
+    description: "Container image for inv-javabatch"
+    value: image-registry.openshift-image-registry.svc:5000/dev252/inv-javabatch:latest
+  - name: CONFIGMAP_NAME
+    description: "ConfigMap with runtime configuration"
+    value: inv-javabatch-config
+  - name: TTL_SECONDS
+    description: "Job TTL after completion"
+    value: "3600"
+objects:
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: ${TEMPLATE_JOB_NAME}
+      namespace: ${NAMESPACE}
+      labels:
+        app: inv-javabatch
+        batch.role: template
+    spec:
+      suspend: true
+      backoffLimit: 0
+      ttlSecondsAfterFinished: ${TTL_SECONDS}
+      template:
+        metadata:
+          labels:
+            app: inv-javabatch
+        spec:
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 45
+          containers:
+            - name: inv-javabatch
+              image: ${IMAGE}
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - configMapRef:
+                    name: ${CONFIGMAP_NAME}
+              env:
+                - name: JOB_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
