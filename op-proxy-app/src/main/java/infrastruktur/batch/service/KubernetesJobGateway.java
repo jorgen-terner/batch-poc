@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -44,6 +45,8 @@ public class KubernetesJobGateway {
 
     // Conservatively map only clearly non-recoverable startup reasons to FAILED early.
     private static final Set<String> IRRECOVERABLE_WAITING_REASONS = Set.of(
+        "ImagePullBackOff",
+        "ErrImagePull",
         "InvalidImageName",
         "CreateContainerConfigError",
         "CreateContainerError"
@@ -136,11 +139,16 @@ public class KubernetesJobGateway {
                 return true;
             }
 
+            if (isIrrecoverableReason(status.getReason()) || containsIrrecoverableReason(status.getMessage())) {
+                return true;
+            }
+
             List<PodCondition> conditions = status.getConditions();
             if (conditions != null) {
                 for (PodCondition condition : conditions) {
                     String reason = condition == null ? null : condition.getReason();
-                    if (isIrrecoverableReason(reason)) {
+                    String message = condition == null ? null : condition.getMessage();
+                    if (isIrrecoverableReason(reason) || containsIrrecoverableReason(message)) {
                         return true;
                     }
                 }
@@ -154,19 +162,42 @@ public class KubernetesJobGateway {
             return false;
         }
         for (ContainerStatus containerStatus : containerStatuses) {
-            if (containerStatus == null || containerStatus.getState() == null || containerStatus.getState().getWaiting() == null) {
+            if (containerStatus == null) {
                 continue;
             }
-            String reason = containerStatus.getState().getWaiting().getReason();
-            if (isIrrecoverableReason(reason)) {
-                return true;
+
+            if (containerStatus.getState() != null && containerStatus.getState().getWaiting() != null) {
+                String reason = containerStatus.getState().getWaiting().getReason();
+                String message = containerStatus.getState().getWaiting().getMessage();
+                if (isIrrecoverableReason(reason) || containsIrrecoverableReason(message)) {
+                    return true;
+                }
             }
+
+            if (containerStatus.getLastState() != null && containerStatus.getLastState().getWaiting() != null) {
+                String reason = containerStatus.getLastState().getWaiting().getReason();
+                String message = containerStatus.getLastState().getWaiting().getMessage();
+                if (isIrrecoverableReason(reason) || containsIrrecoverableReason(message)) {
+                    return true;
+                }
+            }
+
         }
         return false;
     }
 
     private boolean isIrrecoverableReason(String reason) {
         return reason != null && IRRECOVERABLE_WAITING_REASONS.contains(reason);
+    }
+
+    private boolean containsIrrecoverableReason(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        String normalized = value.toLowerCase(Locale.ROOT);
+        return IRRECOVERABLE_WAITING_REASONS.stream()
+            .map(reason -> reason.toLowerCase(Locale.ROOT))
+            .anyMatch(normalized::contains);
     }
 
     public void deleteJob(String namespace, String jobName) {
