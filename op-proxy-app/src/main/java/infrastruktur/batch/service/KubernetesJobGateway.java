@@ -1,10 +1,13 @@
 package infrastruktur.batch.service;
 
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
+import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.ManagedFieldsEntry;
 import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodCondition;
+import io.fabric8.kubernetes.api.model.PodStatus;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
@@ -15,12 +18,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 @ApplicationScoped
@@ -35,6 +40,13 @@ public class KubernetesJobGateway {
         "batch.kubernetes.io/controller-uid",
         "job-name",
         "batch.kubernetes.io/job-name"
+    );
+
+    // Conservatively map only clearly non-recoverable startup reasons to FAILED early.
+    private static final Set<String> IRRECOVERABLE_WAITING_REASONS = Set.of(
+        "InvalidImageName",
+        "CreateContainerConfigError",
+        "CreateContainerError"
     );
 
     private final KubernetesClient client;
@@ -108,6 +120,55 @@ public class KubernetesJobGateway {
         return podNames.size();
     }
 
+    public boolean hasIrrecoverablePodFailure(String namespace, String jobName) {
+        var podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
+        for (Pod pod : podList.getItems()) {
+            PodStatus status = pod.getStatus();
+            if (status == null) {
+                continue;
+            }
+
+            if (hasIrrecoverableWaitingReason(status.getContainerStatuses())) {
+                return true;
+            }
+
+            if (hasIrrecoverableWaitingReason(status.getInitContainerStatuses())) {
+                return true;
+            }
+
+            List<PodCondition> conditions = status.getConditions();
+            if (conditions != null) {
+                for (PodCondition condition : conditions) {
+                    String reason = condition == null ? null : condition.getReason();
+                    if (isIrrecoverableReason(reason)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean hasIrrecoverableWaitingReason(List<ContainerStatus> containerStatuses) {
+        if (containerStatuses == null) {
+            return false;
+        }
+        for (ContainerStatus containerStatus : containerStatuses) {
+            if (containerStatus == null || containerStatus.getState() == null || containerStatus.getState().getWaiting() == null) {
+                continue;
+            }
+            String reason = containerStatus.getState().getWaiting().getReason();
+            if (isIrrecoverableReason(reason)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isIrrecoverableReason(String reason) {
+        return reason != null && IRRECOVERABLE_WAITING_REASONS.contains(reason);
+    }
+
     public void deleteJob(String namespace, String jobName) {
         client.batch().v1().jobs().inNamespace(namespace).withName(jobName).delete();
     }
@@ -142,8 +203,11 @@ public class KubernetesJobGateway {
                 return jobFromTemplate;
             }
         } catch (InterruptedException ex) {
-            LOG.debug("OpenShift Template processing was interrupted, falling back to direct Job lookup");
             Thread.currentThread().interrupt();
+            throw new IllegalStateException(
+                "Interrupted while processing OpenShift template: " + namespace + "/" + templateName,
+                ex
+            );
         } catch (IOException ex) {
             LOG.debug("Failed to process as OpenShift Template (I/O error), falling back to direct Job lookup: {}", ex.getMessage());
         } catch (IllegalStateException ex) {
@@ -171,10 +235,14 @@ public class KubernetesJobGateway {
         boolean completed = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
         if (!completed) {
             process.destroy();
+            if (!process.waitFor(2, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                process.waitFor(2, TimeUnit.SECONDS);
+            }
             throw new IOException("oc process timed out after 30 seconds for template: " + namespace + "/" + templateName);
         }
 
-        String output = new String(process.getInputStream().readAllBytes());
+        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         int exitCode = process.exitValue();
 
         if (exitCode != 0) {

@@ -77,12 +77,16 @@ public class TemplateRunService {
         int succeeded = status != null && status.getSucceeded() != null ? status.getSucceeded() : 0;
         int failed = status != null && status.getFailed() != null ? status.getFailed() : 0;
         boolean suspended = runJob.getSpec() != null && Boolean.TRUE.equals(runJob.getSpec().getSuspend());
+        boolean irrecoverablePodFailure = kubernetesJobGateway.hasIrrecoverablePodFailure(namespace, runName);
 
         Instant startTime = JobHelper.parseInstant(status == null ? null : status.getStartTime());
         Instant completionTime = JobHelper.parseInstant(status == null ? null : status.getCompletionTime());
         Long elapsed = JobHelper.computeElapsedSeconds(startTime, completionTime);
 
         String phase = jobPhaseResolver.resolvePhase(runJob, active, succeeded, failed, suspended);
+        if (("RUNNING".equalsIgnoreCase(phase) || "PENDING".equalsIgnoreCase(phase)) && irrecoverablePodFailure) {
+            phase = "FAILED";
+        }
         return new RunStatusResponseVO(
             namespace,
             resolveTemplateName(runJob),
