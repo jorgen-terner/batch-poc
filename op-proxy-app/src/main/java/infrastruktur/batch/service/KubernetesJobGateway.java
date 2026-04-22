@@ -182,40 +182,66 @@ public class KubernetesJobGateway {
             return null;
         }
 
-        // Parse YAML för att hitta Job-objektet - med säker error-hantering
-        List<?> resources;
+        Job job = extractJobFromProcessedOutput(output);
+        if (job == null) {
+            LOG.warn("No Job found in processed Template output: {}/{}", namespace, templateName);
+            return null;
+        }
+
+        validateJobStructure(job);
+        return job;
+    }
+
+    private Job extractJobFromProcessedOutput(String output) {
+        final Object parsed;
         try {
-            resources = Serialization.unmarshal(output, List.class);
+            parsed = Serialization.unmarshal(output, Object.class);
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to parse YAML from oc process output: " + ex.getMessage(), ex);
         }
 
-        if (resources == null) {
-            LOG.warn("oc process returned empty YAML for template: {}/{}", namespace, templateName);
+        return extractJobFromNode(parsed);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Job extractJobFromNode(Object node) {
+        if (node == null) {
             return null;
         }
 
-        for (Object resource : resources) {
-            if (resource instanceof Map<?, ?> map) {
-                Object kind = map.get("kind");
-                if ("Job".equals(kind)) {
-                    // Konvertera Map till Job via JSON - med validering
-                    try {
-                        String json = Serialization.asJson(map);
-                        Job job = Serialization.unmarshal(json, Job.class);
-                        
-                        // Validera att Job-strukturen är välformad
-                        validateJobStructure(job);
-                        return job;
-                    } catch (Exception ex) {
-                        throw new IllegalStateException("Failed to parse Job from Template YAML: " + ex.getMessage(), ex);
-                    }
+        if (node instanceof List<?> list) {
+            for (Object item : list) {
+                Job job = extractJobFromNode(item);
+                if (job != null) {
+                    return job;
                 }
+            }
+            return null;
+        }
+
+        if (!(node instanceof Map<?, ?> rawMap)) {
+            return null;
+        }
+
+        Map<String, Object> map = (Map<String, Object>) rawMap;
+        Object kind = map.get("kind");
+
+        if ("Job".equals(kind)) {
+            try {
+                return Serialization.unmarshal(Serialization.asJson(map), Job.class);
+            } catch (Exception ex) {
+                throw new IllegalStateException("Failed to parse Job from Template YAML: " + ex.getMessage(), ex);
             }
         }
 
-        LOG.warn("No Job found in processed Template output: {}/{}", namespace, templateName);
-        return null;
+        Object items = map.get("items");
+        Job fromItems = extractJobFromNode(items);
+        if (fromItems != null) {
+            return fromItems;
+        }
+
+        Object objects = map.get("objects");
+        return extractJobFromNode(objects);
     }
 
     private void validateJobStructure(Job job) {

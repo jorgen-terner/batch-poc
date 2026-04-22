@@ -152,7 +152,7 @@ Om du vill starta och styra suspended/template-jobb via op-proxy-app kan du anv�
 .\gradlew :op-proxy-app:runCli --args="--namespace dev252 start inv-javabatch-suspended --timeout-seconds 900"
 
 # v2 template/run
-.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-suspended --client-request-id inv-4711 --timeout-seconds 900"
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
 ```
 
 Se `op-proxy-app/README.md` för fullständig beskrivning av HTTP-API och komplett CLI-dokumentation (v1 + v2).
