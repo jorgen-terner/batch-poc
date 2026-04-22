@@ -96,3 +96,23 @@ Konfigurerade variabler (från `inf-javabatch/README.md`):
 - `SUCCESS_STATUS_VALUES` (default `COMPLETED`)
 - `FAILURE_STATUS_VALUES` (default `FAILED,ABANDONED,UNKNOWN,STOPPED`)
 - `JAVA_OPTS` (valfri)
+
+## Styrning via op-proxy-app CLI (v1 och v2)
+
+Om du vill starta och styra suspended/template-jobb via op-proxy-app kan du använda CLI från repo-roten `c:/repos/batch-poc`.
+
+```powershell
+# Hjälp
+.\gradlew :op-proxy-app:runCli --args="--help"
+
+# v1 legacy (suspended Jobs)
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 start inv-javabatch-suspended --timeout-seconds 900"
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 status inv-javabatch-suspended --watch --interval-seconds 5 --timeout-seconds 900"
+
+# v2 template/run
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-suspended --client-request-id inv-4711 --timeout-seconds 900"
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 run-status inv-javabatch-suspended-20260422101500-ab12cd --watch --interval-seconds 5 --timeout-seconds 900"
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 cancel-run inv-javabatch-suspended-20260422101500-ab12cd --delete-pods=true"
+```
+
+Se `op-proxy-app/README.md` för fullständig beskrivning av HTTP-API och CLI-kontrakt.
