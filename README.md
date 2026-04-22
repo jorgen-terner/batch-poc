@@ -104,23 +104,20 @@ Skapar en ny jobbkörning med samma grundkonfiguration som ursprungsjobbet (conf
 
 För batchflöden via `op-proxy-app` finns både legacy v1 (suspended Jobs) och v2 (template/run).
 
-Kör från projektroten:
+Snabbexempel från projektroten:
 
 ```powershell
-# Hjälp
+# Visa hjälp
 .\gradlew :op-proxy-app:runCli --args="--help"
 
-# v1 legacy
-.\gradlew :op-proxy-app:runCli --args="--namespace default start sample-batch-job --timeout-seconds 900"
-.\gradlew :op-proxy-app:runCli --args="--namespace default restart sample-batch-job --keep-failed-pods=false"
+# v1: starta suspended Job
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 start inv-javabatch-suspended --timeout-seconds 900"
 
-# v2 template/run
-.\gradlew :op-proxy-app:runCli --args="--namespace default create-run sample-batch-job --client-request-id order-4711 --timeout-seconds 900"
-.\gradlew :op-proxy-app:runCli --args="--namespace default run-status sample-batch-job-20260422101500-ab12cd --watch --interval-seconds 5 --timeout-seconds 900"
-.\gradlew :op-proxy-app:runCli --args="--namespace default cancel-run sample-batch-job-20260422101500-ab12cd --delete-pods=true"
+# v2: skapa körning från template
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-suspended --client-request-id inv-4711 --timeout-seconds 900"
 ```
 
-Mer detaljer om API-kontrakt och fler exempel finns i `op-proxy-app/README.md`.
+`op-proxy-app/README.md` är source of truth för full CLI-dokumentation (v1 + v2), parametrar och fler exempel.
 
 ### BATCH_TYP och statistikrapportering
 
@@ -169,7 +166,7 @@ ConfigMap-data cachas för att minska belastning på Kubernetes API. Använd des
 
 ## Kör lokalt (utan Kubernetes)
 
-För lokal utveckling med Minikube/Docker Desktop Kubernetes:
+För lokal utveckling:
 
 ```bash
 # Bygg applikationen
@@ -259,22 +256,6 @@ oc start-build inf-batch-testapp1 --from-dir=. --follow -n dev252
 
 # Kör som Kubernetes Job
 oc create job testapp1-run --image=image-registry.openshift-image-registry.svc:5000/dev252/inf-batch-testapp1:latest -n dev252
-```
-
-### Alternativ 2: Lokal Docker build och push
-
-```powershell
-# Bygg Docker image lokalt
-cd inf-batch-job
-docker build -t inf-batch-job:latest .
-
-# Logga in på OpenShift registry
-$token = oc whoami -t
-docker login -u $(oc whoami) -p $token default-route-openshift-image-registry.apps.your-cluster.com
-
-# Tagga och pusha
-docker tag inf-batch-job:latest default-route-openshift-image-registry.apps.your-cluster.com/dev252/inf-batch-job:latest
-docker push default-route-openshift-image-registry.apps.your-cluster.com/dev252/inf-batch-job:latest
 ```
 
 ### RBAC-konfiguration

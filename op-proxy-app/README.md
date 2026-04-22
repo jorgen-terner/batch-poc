@@ -39,7 +39,6 @@ Bygg jar:
 
 - OpenShift CLI (`oc`) installerad och konfigurerad
 - Inloggad i OpenShift-klustret: `oc login <cluster-url>`
-- Docker/Podman installerat (för lokalt bygge)
 
 ### Automatisk deploy (rekommenderat)
 
@@ -63,7 +62,7 @@ chmod +x ./setup-openshift.sh
 Scriptet gör följande:
 1. Bygger appen lokalt (`./gradlew build`)
 2. Skapar namespace (om det inte finns)
-3. Bygger Docker-imagen via OpenShift BuildConfig
+3. Bygger containerimagen via OpenShift BuildConfig
 4. Applicerar ServiceAccount och RBAC från `rbac-op-proxy-app.yaml`
 5. Deployar op-proxy-app med Service och Route
 
@@ -75,22 +74,17 @@ Scriptet gör följande:
 ./gradlew clean build
 ```
 
-**2. Bygga och pusha Docker-imagen:**
+**2. Bygg image via OpenShift BuildConfig:**
 
 ```bash
-# Få registry-URL
-REGISTRY=$(oc registry info)
-NAMESPACE="batch-jobs"
-IMAGE_TAG="latest"
+# Skapa BuildConfig (en gång)
+oc -n batch-jobs new-build --binary --name=op-proxy-app --strategy=docker --to=op-proxy-app:latest
 
-# Bygg imagen
-docker build -t ${REGISTRY}/${NAMESPACE}/op-proxy-app:${IMAGE_TAG} .
+# Säkerställ att builden använder Dockerfile i denna modul
+oc -n batch-jobs patch bc/op-proxy-app -p '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"op-proxy-app/Dockerfile"}}}}'
 
-# Logga in i OpenShift registry (om behövs)
-docker login -u $(oc whoami) -p $(oc whoami -t) ${REGISTRY}
-
-# Pusha imagen
-docker push ${REGISTRY}/${NAMESPACE}/op-proxy-app:${IMAGE_TAG}
+# Starta build från repo-roten
+oc -n batch-jobs start-build op-proxy-app --from-dir=. --follow
 ```
 
 **3. Applicera RBAC (ServiceAccount + Role + RoleBinding):**
