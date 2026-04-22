@@ -13,14 +13,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
-import java.util.UUID;
 
 @ApplicationScoped
 public class TemplateRunService {
     private static final Logger LOG = LoggerFactory.getLogger(TemplateRunService.class);
-    private static final int MAX_RUN_NAME_LENGTH = 63;
 
     private final KubernetesJobGateway kubernetesJobGateway;
     private final JobPhaseResolver jobPhaseResolver;
@@ -45,9 +42,11 @@ public class TemplateRunService {
         Map<String, String> parameters = JobHelper.normalizeParameters(request == null ? null : request.parameters());
 
         JobHelper.validateTimeoutSeconds(timeoutSeconds);
-        String runName = generateRunName(templateName);
-
-        kubernetesJobGateway.createRunFromTemplate(namespace, templateName, runName, timeoutSeconds, parameters);
+        Job createdRun = kubernetesJobGateway.createRunFromTemplate(namespace, templateName, timeoutSeconds, parameters);
+        String runName = createdRun.getMetadata() != null ? createdRun.getMetadata().getName() : null;
+        if (runName == null || runName.isBlank()) {
+            throw new IllegalStateException("Created run is missing metadata.name");
+        }
         LOG.info("Created run {}/{} from template {} (timeoutSeconds={}, parameters={})",
             namespace,
             runName,
@@ -177,47 +176,10 @@ public class TemplateRunService {
         return labelValue;
     }
 
-    private String generateRunName(String templateName) {
-        String suffix = DateTimeFormatter.ofPattern("yyyyMMddHHmmss").format(java.time.LocalDateTime.now())
-            + "-" + UUID.randomUUID().toString().substring(0, 6);
-        return normalizeRunName(templateName + "-" + suffix);
-    }
-
     private void validateTemplateName(String templateName) {
         if (templateName == null || templateName.isBlank()) {
             throw new IllegalArgumentException("templateName must be provided");
         }
-    }
-
-    private String normalizeRunName(String value) {
-        String normalized = value == null ? "" : value.trim().toLowerCase();
-        if (normalized.isEmpty()) {
-            throw new IllegalArgumentException("runName must be provided");
-        }
-        normalized = normalized.replaceAll("[^a-z0-9-]", "-");
-        normalized = normalized.replaceAll("-+", "-");
-        normalized = trimHyphen(normalized);
-        if (normalized.isEmpty()) {
-            throw new IllegalArgumentException("runName must contain at least one valid character");
-        }
-        if (normalized.length() > MAX_RUN_NAME_LENGTH) {
-            normalized = trimHyphen(normalized.substring(0, MAX_RUN_NAME_LENGTH));
-        }
-        if (normalized.isEmpty()) {
-            throw new IllegalArgumentException("runName became invalid after normalization");
-        }
-        return normalized;
-    }
-
-    private String trimHyphen(String value) {
-        String trimmed = value;
-        while (trimmed.startsWith("-")) {
-            trimmed = trimmed.substring(1);
-        }
-        while (trimmed.endsWith("-")) {
-            trimmed = trimmed.substring(0, trimmed.length() - 1);
-        }
-        return trimmed;
     }
 
     private String trimToNull(String value) {

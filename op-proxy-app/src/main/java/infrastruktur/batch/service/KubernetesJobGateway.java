@@ -210,8 +210,8 @@ public class KubernetesJobGateway {
             .delete();
     }
 
-    public void createJob(String namespace, Job job) {
-        client.batch().v1().jobs().inNamespace(namespace).resource(job).create();
+    public Job createJob(String namespace, Job job) {
+        return client.batch().v1().jobs().inNamespace(namespace).resource(job).create();
     }
 
     public void waitForDeletion(String namespace, String jobName, long pollIntervalMillis, int maxAttempts) {
@@ -401,8 +401,9 @@ public class KubernetesJobGateway {
         return builder.build();
     }
 
-    public void createRunFromTemplate(String namespace, String templateName, String runName, Long timeoutSeconds, Map<String, String> parameters) {
+    public Job createRunFromTemplate(String namespace, String templateName, Long timeoutSeconds, Map<String, String> parameters) {
         Job templateJob = loadJobFromTemplate(namespace, templateName);
+        String runName = extractRequiredJobName(templateJob);
         List<EnvVar> existingEnv = getFirstContainerEnvOrThrow(templateJob);
         Map<String, String> runLabels = sanitizeTemplateLabels(templateJob);
         runLabels.put(TEMPLATE_NAME_LABEL, templateName);
@@ -439,7 +440,15 @@ public class KubernetesJobGateway {
         }
 
         applyParametersToFirstContainer(builder, existingEnv, parameters);
-        createJob(namespace, builder.build());
+        return createJob(namespace, builder.build());
+    }
+
+    private String extractRequiredJobName(Job job) {
+        String name = job == null || job.getMetadata() == null ? null : job.getMetadata().getName();
+        if (name == null || name.isBlank()) {
+            throw new IllegalStateException("Template Job must define metadata.name");
+        }
+        return name;
     }
 
     private Map<String, String> sanitizeTemplateLabels(Job source) {

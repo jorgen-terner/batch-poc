@@ -163,7 +163,7 @@ CLI:t använder samma JobControlService som HTTP-API:t, men utan HTTP-lager.
 
 Utöver legacy-API:t för suspended Jobs finns nu ett separat v2-API för template-baserade körningar i OpenShift/Kubernetes.
 
-Flödet utgår från ett existerande template-Job i klustret. När klienten skapar en run kopierar op-proxy-app template-jobbet, sätter ett nytt servergenererat `runName`, applicerar eventuella parametrar som env-variabler och skapar ett nytt Job.
+Flödet utgår från en OpenShift Template-resurs i klustret. När klienten skapar en run processar op-proxy-app templaten, använder `metadata.name` från processad template som `runName`, applicerar eventuella parametrar som env-variabler och skapar ett nytt Job.
 
 Se [TEMPLATE-RUN-API-RFC.md](TEMPLATE-RUN-API-RFC.md) för bakgrund och migreringsidéer. README:n nedan beskriver den aktuella implementationen.
 
@@ -184,7 +184,7 @@ Create/cancel response (`RunActionResponseVO`) innehåller `namespace`, `templat
 
 Status response (`RunStatusResponseVO`) innehåller `namespace`, `templateName`, `runName`, `phase`, pod-räknare och tidsfält.
 
-`runName` skickas inte in av klienten. Det genereras alltid av servern och används sedan för status- och cancel-anrop.
+`runName` skickas inte in av klienten. Det sätts av processad template (`metadata.name`) och returneras i create-run-responsen för status- och cancel-anrop.
 
 Validering av `parameters` i v2:
 - `name` måste vara satt och får inte vara blankt
@@ -198,9 +198,9 @@ Cancel request:
 ### Flöde i v2
 
 1. Klienten anropar `POST /api/v2/templates/{templateName}/runs`.
-2. op-proxy-app läser template-jobbet i samma namespace.
-3. Ett nytt `runName` genereras av servern.
-4. Ett nytt Job skapas från template-jobbet med labels för template och run.
+2. op-proxy-app processar templaten i samma namespace.
+3. `runName` läses från `metadata.name` i processad template.
+4. Ett nytt Job skapas från processad template med labels för template och run.
 5. Klienten följer körningen via `GET /api/v2/runs/{runName}`.
 6. Vid behov avbryts körningen via `POST /api/v2/runs/{runName}/cancel`.
 

@@ -9,8 +9,9 @@ parameters:
     description: "OpenShift namespace where template Job is created"
     value: dev252
   - name: TEMPLATE_JOB_NAME
-    description: "Name used as templateName in /api/v2/templates/{templateName}/runs"
-    value: inv-javabatch-suspended
+    description: "Generated Job name (change to fixed value for single-instance jobs)"
+    generate: expression
+    from: "inv-javabatch-[a-z0-9]{6}"
   - name: IMAGE
     description: "Container image for inv-javabatch"
     value: image-registry.openshift-image-registry.svc:5000/dev252/inv-javabatch:latest

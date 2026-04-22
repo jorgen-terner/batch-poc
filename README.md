@@ -114,7 +114,7 @@ Snabbexempel från projektroten:
 .\gradlew :op-proxy-app:runCli --args="--namespace dev252 start inv-javabatch-suspended --timeout-seconds 900"
 
 # v2: skapa körning från template
-.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-suspended --client-request-id inv-4711 --timeout-seconds 900"
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
 ```
 
 `op-proxy-app/README.md` är source of truth för full CLI-dokumentation (v1 + v2), parametrar och fler exempel.

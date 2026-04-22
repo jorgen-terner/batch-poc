@@ -89,15 +89,16 @@ Response (`RunActionResponseVO`):
 
 ## 2. Namnstrategi
 
-`runName` skickas inte in av klienten. Servern genererar alltid ett nytt `runName` och returnerar det i svaret.
+`runName` skickas inte in av klienten. `runName` sätts av processad OpenShift-template via `metadata.name` och returneras i create-run-svaret.
 
 Regler:
 
-1. `runName` genereras alltid av servern.
-2. `clientRequestId` kan anvandas for korrelation och framtida idempotens per `templateName + clientRequestId`.
-3. Namngenereringen inkluderar tidsdel och kort random-del for att minska risk for kollisioner.
+1. `runName` styrs av template-forfattaren i `template.yaml`.
+2. För multi-instance kan templaten generera suffix (t.ex. `generate: expression`).
+3. För single-instance används fast namn; om jobb med samma namn redan finns returneras `AlreadyExists` från Kubernetes.
+4. `clientRequestId` kan anvandas for korrelation och framtida idempotens per `templateName + clientRequestId`.
 
-Detta minskar API-logik och validering, samtidigt som samtidiga korningar blir enklare.
+Detta flyttar namnansvaret till templaten och minskar serverlogik i op-proxy-app.
 
 ## 3. VO-kontrakt (nya records)
 

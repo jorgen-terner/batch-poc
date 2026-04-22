@@ -42,6 +42,7 @@ Byt `dev252` till ditt namespace.
 ## 3. Skapa template-jobb för op-proxy-app v2
 
 `op-proxy-app` v2 (`POST /api/v2/templates/{templateName}/runs`) kan läsa en OpenShift Template-resurs direkt och skapa Job-objektet från den.
+Job-namnet kommer från `metadata.name` i processad template (inte från op-proxy-app).
 
 ### Steg 1: Registrera OpenShift Template
 
@@ -49,7 +50,7 @@ Byt `dev252` till ditt namespace.
 oc apply -f inv-javabatch/template.yaml
 ```
 
-Det är allt du behöver göra. op-proxy-app v2 kommer att läsa denna Template och generera Job-objektet automatiskt vid första `create-run`-anropet.
+Det är allt du behöver göra. op-proxy-app v2 kommer att läsa denna Template och skapa ett Job vid varje `create-run`.
 
 ### Steg 2: Skapa runs via op-proxy-app v2
 
@@ -73,13 +74,22 @@ curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-template/r
   }'
 ```
 
-**Första gången** du anropar `create-run` kommer op-proxy-app att:
+Vid varje `create-run` kommer op-proxy-app att:
 1. Läsa OpenShift Template `inv-javabatch-template`
 2. Köra `oc process inv-javabatch-template` för att generera Job-manifest
-3. Skapa Job-objektet `inv-javabatch-suspended` i klustret
-4. Klona Job för varje run
+3. Skapa Job-objektet med namnet från `metadata.name` i templaten
 
-Efterföljande `create-run`-anrop klona bara det befintliga Job-objektet.
+I denna template genereras suffix på namn via:
+
+```yaml
+parameters:
+  - name: TEMPLATE_JOB_NAME
+    generate: expression
+    from: "inv-javabatch-[a-z0-9]{6}"
+```
+
+För single-instance (fast namn): ändra `TEMPLATE_JOB_NAME` till fast värde och ta bort `generate/from`.
+Om ett Job med samma namn redan finns returnerar Kubernetes ett tydligt `AlreadyExists`-fel.
 
 ## Spara imagen från garbage collection
 

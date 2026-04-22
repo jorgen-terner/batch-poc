@@ -286,7 +286,7 @@ public final class BatchJobCli implements Runnable {
         @CommandLine.ParentCommand
         private BatchJobCli parent;
 
-        @Parameters(index = "0", description = "Template Job name")
+        @Parameters(index = "0", description = "OpenShift Template resource name")
         private String templateName;
 
         @Option(names = {"--client-request-id"}, description = "Optional client correlation id")
