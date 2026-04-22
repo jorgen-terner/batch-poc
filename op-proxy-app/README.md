@@ -242,6 +242,8 @@ Validering av `parameters`:
 
 ### CLI-API
 
+CLI:t innehåller nu kommandon för både v1 (legacy suspended Jobs) och v2 (template/run).
+
 Visa hjälp:
 
 ```bash
@@ -260,6 +262,23 @@ Exempel anrop:
 
 `--parameter` kan anges flera gånger och ska ha formatet `name=value`.
 Dubbel parameternyckel i samma CLI-anrop avvisas.
+
+#### v2 (template/run)
+
+Exempel anrop:
+
+```bash
+./gradlew runCli --args="--namespace default create-run sample-batch-job --client-request-id order-4711 --timeout-seconds 900"
+./gradlew runCli --args="--namespace default create-run sample-batch-job --parameter runType=FULL --parameter businessDate=2026-04-17"
+./gradlew runCli --args="--namespace default run-status sample-batch-job-20260422101500-ab12cd"
+./gradlew runCli --args="--namespace default run-status sample-batch-job-20260422101500-ab12cd --watch --interval-seconds 5 --timeout-seconds 900"
+./gradlew runCli --args="--namespace default cancel-run sample-batch-job-20260422101500-ab12cd"
+./gradlew runCli --args="--namespace default cancel-run sample-batch-job-20260422101500-ab12cd --delete-pods=true"
+```
+
+`create-run` accepterar `--client-request-id`, `--timeout-seconds` och upprepad `--parameter name=value`.
+`run-status` följer samma watch-beteende som v1-status.
+`cancel-run` raderar enbart Jobbet som default, och med `--delete-pods=true` raderas även pods.
 
 Exit-koder (CI/CD):
 - `0` = `SUCCEEDED`

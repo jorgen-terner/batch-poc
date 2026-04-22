@@ -100,6 +100,28 @@ Skapar en ny jobbkörning med samma grundkonfiguration som ursprungsjobbet (conf
 **Status värden:** `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`
 ```
 
+## op-proxy-app CLI-exempel (v1 och v2)
+
+För batchflöden via `op-proxy-app` finns både legacy v1 (suspended Jobs) och v2 (template/run).
+
+Kör från projektroten:
+
+```powershell
+# Hjälp
+.\gradlew :op-proxy-app:runCli --args="--help"
+
+# v1 legacy
+.\gradlew :op-proxy-app:runCli --args="--namespace default start sample-batch-job --timeout-seconds 900"
+.\gradlew :op-proxy-app:runCli --args="--namespace default restart sample-batch-job --keep-failed-pods=false"
+
+# v2 template/run
+.\gradlew :op-proxy-app:runCli --args="--namespace default create-run sample-batch-job --client-request-id order-4711 --timeout-seconds 900"
+.\gradlew :op-proxy-app:runCli --args="--namespace default run-status sample-batch-job-20260422101500-ab12cd --watch --interval-seconds 5 --timeout-seconds 900"
+.\gradlew :op-proxy-app:runCli --args="--namespace default cancel-run sample-batch-job-20260422101500-ab12cd --delete-pods=true"
+```
+
+Mer detaljer om API-kontrakt och fler exempel finns i `op-proxy-app/README.md`.
+
 ### BATCH_TYP och statistikrapportering
 
 - Om `BATCH_TYP=JAVABATCH` i ConfigMap som anges i `configMapName`:
