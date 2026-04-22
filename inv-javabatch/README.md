@@ -41,14 +41,26 @@ Byt `dev252` till ditt namespace.
 
 ## 3. Skapa template-jobb for op-proxy-app v2
 
-`op-proxy-app` v2 (`POST /api/v2/templates/{templateName}/runs`) klonar ett befintligt Job i samma namespace.
-Anvand `template.yaml` for att skapa detta template-Job.
+`op-proxy-app` v2 (`POST /api/v2/templates/{templateName}/runs`) klonar ett befintligt Job-objekt i samma namespace.
+Anvand OpenShift Template (`template.yaml`) for att generera detta template-Job.
 
-Applicera och processa templaten:
+**Viktigt:** Template och Job är två olika saker:
+- **Template** = en resursleverantör som du registrerar med `oc apply`
+- **Job** = det faktiska Job-objektet som op-proxy-app v2 kloning från
+
+Du maste köra båda stegen.
+
+### Steg 1: Registrera OpenShift Template
 
 ```bash
 oc apply -f inv-javabatch/template.yaml
+```
 
+### Steg 2: Generera och skapa Job från Template
+
+Denna steg skapar det faktiska Job-objektet (med namn `inv-javabatch-suspended`) som op-proxy-app v2 ska klona från:
+
+```bash
 oc process inv-javabatch-template \
   -p NAMESPACE=dev252 \
   -p TEMPLATE_JOB_NAME=inv-javabatch-suspended \
@@ -57,16 +69,22 @@ oc process inv-javabatch-template \
   | oc apply -f -
 ```
 
-Verifiera template-jobbet:
+### Steg 3: Verifiera Job-objektet
+
+Verifiera att Job-objektet med namn `inv-javabatch-suspended` existerar:
 
 ```bash
 oc get job inv-javabatch-suspended -n dev252
 oc get job inv-javabatch-suspended -n dev252 -o jsonpath='{.spec.suspend}'
 ```
 
-Forvanta `true` pa `spec.suspend` for template-jobbet.
+Forvanta `true` pa `spec.suspend`. Om du får "not found" har steg 2 misslyckats.
 
-Exempel: skapa korning via op-proxy-app v2
+### Steg 4: Skapa runs via op-proxy-app v2
+
+Nu kan du skapa runs. **Observera:** `templateName` i API-anropet maste vara `inv-javabatch-suspended` (Job-namnet), inte `inv-javabatch-template` (Template-namnet).
+
+Exempel med curl:
 
 ```bash
 curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-suspended/runs" \
@@ -80,9 +98,13 @@ curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-suspended/
   }'
 ```
 
-`templateName` i v2-anropet maste matcha `TEMPLATE_JOB_NAME`.
+Exempel med CLI:
 
-### Spara imagen från garbage collection
+```bash
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-suspended --client-request-id inv-4711 --timeout-seconds 900"
+```
+
+## Spara imagen från garbage collection
 
 Images rensas automatiskt av Kubernetes efter ett par arbetsdagar om de inte refereras. För att behålla din byggda image, tagga den med en permanent tag efter bygg:
 
