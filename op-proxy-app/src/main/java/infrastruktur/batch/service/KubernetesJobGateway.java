@@ -8,18 +8,25 @@ import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.utils.Serialization;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.concurrent.TimeUnit;
 
 @ApplicationScoped
 public class KubernetesJobGateway {
+    private static final Logger LOG = LoggerFactory.getLogger(KubernetesJobGateway.class);
+    
     public static final String TEMPLATE_NAME_LABEL = "batch.template-name";
     public static final String RUN_NAME_LABEL = "batch.run-name";
 
@@ -126,6 +133,110 @@ public class KubernetesJobGateway {
         throw new IllegalStateException("Timed out waiting for Job deletion: " + namespace + "/" + jobName);
     }
 
+    private Job loadJobFromTemplate(String namespace, String templateName) {
+        // Först, försöka läsa som OpenShift Template-resurs
+        try {
+            Job jobFromTemplate = processOpenShiftTemplate(namespace, templateName);
+            if (jobFromTemplate != null) {
+                LOG.info("Loaded Job from OpenShift Template: {}/{}", namespace, templateName);
+                return jobFromTemplate;
+            }
+        } catch (InterruptedException ex) {
+            LOG.debug("OpenShift Template processing was interrupted, falling back to direct Job lookup");
+            Thread.currentThread().interrupt();
+        } catch (IOException ex) {
+            LOG.debug("Failed to process as OpenShift Template (I/O error), falling back to direct Job lookup: {}", ex.getMessage());
+        } catch (IllegalStateException ex) {
+            LOG.debug("Failed to process as OpenShift Template (invalid structure), falling back to direct Job lookup: {}", ex.getMessage());
+        }
+
+        // Fallback: Läs direkt som Job
+        LOG.debug("Looking for Job resource: {}/{}", namespace, templateName);
+        return requireJob(namespace, templateName);
+    }
+
+    private Job processOpenShiftTemplate(String namespace, String templateName) throws IOException, InterruptedException {
+        // Kör: oc process <template-name> -n <namespace> -o yaml
+        // Timeout satt till 30 sekunder för att förhindra eternal waiting
+        ProcessBuilder pb = new ProcessBuilder(
+            "oc", "process", templateName,
+            "-n", namespace,
+            "-o", "yaml"
+        );
+        pb.redirectErrorStream(true);
+
+        Process process = pb.start();
+        
+        // Vänta på process med timeout
+        boolean completed = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
+        if (!completed) {
+            process.destroy();
+            throw new IOException("oc process timed out after 30 seconds for template: " + namespace + "/" + templateName);
+        }
+
+        String output = new String(process.getInputStream().readAllBytes());
+        int exitCode = process.exitValue();
+
+        if (exitCode != 0) {
+            LOG.debug("oc process failed with exit code {}: {}", exitCode, output);
+            return null;
+        }
+
+        // Parse YAML för att hitta Job-objektet - med säker error-hantering
+        List<?> resources;
+        try {
+            resources = Serialization.unmarshal(output, List.class);
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to parse YAML from oc process output: " + ex.getMessage(), ex);
+        }
+
+        if (resources == null) {
+            LOG.warn("oc process returned empty YAML for template: {}/{}", namespace, templateName);
+            return null;
+        }
+
+        for (Object resource : resources) {
+            if (resource instanceof Map<?, ?> map) {
+                Object kind = map.get("kind");
+                if ("Job".equals(kind)) {
+                    // Konvertera Map till Job via JSON - med validering
+                    try {
+                        String json = Serialization.asJson(map);
+                        Job job = Serialization.unmarshal(json, Job.class);
+                        
+                        // Validera att Job-strukturen är välformad
+                        validateJobStructure(job);
+                        return job;
+                    } catch (Exception ex) {
+                        throw new IllegalStateException("Failed to parse Job from Template YAML: " + ex.getMessage(), ex);
+                    }
+                }
+            }
+        }
+
+        LOG.warn("No Job found in processed Template output: {}/{}", namespace, templateName);
+        return null;
+    }
+
+    private void validateJobStructure(Job job) {
+        if (job == null) {
+            throw new IllegalStateException("Job object is null");
+        }
+        if (job.getMetadata() == null || job.getMetadata().getName() == null) {
+            throw new IllegalStateException("Job must have metadata.name");
+        }
+        if (job.getSpec() == null) {
+            throw new IllegalStateException("Job must have spec defined");
+        }
+        if (job.getSpec().getTemplate() == null || job.getSpec().getTemplate().getSpec() == null) {
+            throw new IllegalStateException("Job must have spec.template.spec defined");
+        }
+        if (job.getSpec().getTemplate().getSpec().getContainers() == null 
+            || job.getSpec().getTemplate().getSpec().getContainers().isEmpty()) {
+            throw new IllegalStateException("Job must define at least one container in spec.template.spec.containers");
+        }
+    }
+
     public Job createRestartedJob(Job source, Long timeoutSeconds, Map<String, String> parameters) {
         String name = source.getMetadata().getName();
         String namespace = source.getMetadata().getNamespace();
@@ -166,7 +277,7 @@ public class KubernetesJobGateway {
     }
 
     public void createRunFromTemplate(String namespace, String templateName, String runName, Long timeoutSeconds, Map<String, String> parameters) {
-        Job templateJob = requireJob(namespace, templateName);
+        Job templateJob = loadJobFromTemplate(namespace, templateName);
         List<EnvVar> existingEnv = getFirstContainerEnvOrThrow(templateJob);
         Map<String, String> runLabels = sanitizeTemplateLabels(templateJob);
         runLabels.put(TEMPLATE_NAME_LABEL, templateName);

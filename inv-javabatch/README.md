@@ -39,16 +39,9 @@ Sätt alltid `image` i `job.yaml` till OpenShifts interna registry, till exempel
 `image-registry.openshift-image-registry.svc:5000/dev252/inv-javabatch:latest`
 Byt `dev252` till ditt namespace.
 
-## 3. Skapa template-jobb for op-proxy-app v2
+## 3. Skapa template-jobb för op-proxy-app v2
 
-`op-proxy-app` v2 (`POST /api/v2/templates/{templateName}/runs`) klonar ett befintligt Job-objekt i samma namespace.
-Anvand OpenShift Template (`template.yaml`) for att generera detta template-Job.
-
-**Viktigt:** Template och Job är två olika saker:
-- **Template** = en resursleverantör som du registrerar med `oc apply`
-- **Job** = det faktiska Job-objektet som op-proxy-app v2 kloning från
-
-Du maste köra båda stegen.
+`op-proxy-app` v2 (`POST /api/v2/templates/{templateName}/runs`) kan läsa en OpenShift Template-resurs direkt och skapa Job-objektet från den.
 
 ### Steg 1: Registrera OpenShift Template
 
@@ -56,38 +49,20 @@ Du maste köra båda stegen.
 oc apply -f inv-javabatch/template.yaml
 ```
 
-### Steg 2: Generera och skapa Job från Template
+Det är allt du behöver göra. op-proxy-app v2 kommer att läsa denna Template och generera Job-objektet automatiskt vid första `create-run`-anropet.
 
-Denna steg skapar det faktiska Job-objektet (med namn `inv-javabatch-suspended`) som op-proxy-app v2 ska klona från:
+### Steg 2: Skapa runs via op-proxy-app v2
+
+Skapa runs direkt genom att använda Template-namnet:
 
 ```bash
-oc process inv-javabatch-template \
-  -p NAMESPACE=dev252 \
-  -p TEMPLATE_JOB_NAME=inv-javabatch-suspended \
-  -p IMAGE=image-registry.openshift-image-registry.svc:5000/dev252/inv-javabatch:latest \
-  -p CONFIGMAP_NAME=inv-javabatch-config \
-  | oc apply -f -
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
 ```
 
-### Steg 3: Verifiera Job-objektet
-
-Verifiera att Job-objektet med namn `inv-javabatch-suspended` existerar:
+Eller med curl:
 
 ```bash
-oc get job inv-javabatch-suspended -n dev252
-oc get job inv-javabatch-suspended -n dev252 -o jsonpath='{.spec.suspend}'
-```
-
-Forvanta `true` pa `spec.suspend`. Om du får "not found" har steg 2 misslyckats.
-
-### Steg 4: Skapa runs via op-proxy-app v2
-
-Nu kan du skapa runs. **Observera:** `templateName` i API-anropet maste vara `inv-javabatch-suspended` (Job-namnet), inte `inv-javabatch-template` (Template-namnet).
-
-Exempel med curl:
-
-```bash
-curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-suspended/runs" \
+curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-template/runs" \
   -H "Content-Type: application/json" \
   -d '{
     "clientRequestId": "inv-4711",
@@ -98,11 +73,13 @@ curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-suspended/
   }'
 ```
 
-Exempel med CLI:
+**Första gången** du anropar `create-run` kommer op-proxy-app att:
+1. Läsa OpenShift Template `inv-javabatch-template`
+2. Köra `oc process inv-javabatch-template` för att generera Job-manifest
+3. Skapa Job-objektet `inv-javabatch-suspended` i klustret
+4. Klona Job för varje run
 
-```bash
-.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-suspended --client-request-id inv-4711 --timeout-seconds 900"
-```
+Efterföljande `create-run`-anrop klona bara det befintliga Job-objektet.
 
 ## Spara imagen från garbage collection
 
