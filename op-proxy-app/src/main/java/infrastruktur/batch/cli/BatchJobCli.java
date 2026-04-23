@@ -32,6 +32,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
@@ -54,6 +55,11 @@ public final class BatchJobCli implements Runnable {
 
     @Option(names = {"-n", "--namespace"}, defaultValue = "default", description = "Kubernetes namespace")
     String namespace;
+
+    @FunctionalInterface
+    private interface CommandAction {
+        int run();
+    }
 
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
     private CommandLine commandLine;
@@ -113,6 +119,15 @@ public final class BatchJobCli implements Runnable {
     private CommandLine cli() {
         if (commandLine == null) {
             commandLine = new CommandLine(this);
+            commandLine.setExecutionExceptionHandler((ex, cmd, parseResult) -> {
+                String message = ex.getMessage();
+                if (message == null || message.isBlank()) {
+                    message = ex.getClass().getSimpleName();
+                }
+                cmd.getErr().println("Error: " + message);
+                LOG.debug("CLI command failed", ex);
+                return cmd.getCommandSpec().exitCodeOnExecutionException();
+            });
         }
         return commandLine;
     }
@@ -175,13 +190,15 @@ public final class BatchJobCli implements Runnable {
 
         @Override
         public Integer call() {
-            ActionResponse response = parent.service().start(
-                parent.namespace,
-                jobName,
-                new StartJobRequestVO(timeoutSeconds, parent.parseParameters(parameters))
-            );
-            parent.printJson(response);
-            return parent.exitCodeFromState(response.state());
+            return parent.executeWithNotFoundHandling(() -> {
+                ActionResponse response = parent.service().start(
+                    parent.namespace,
+                    jobName,
+                    new StartJobRequestVO(timeoutSeconds, parent.parseParameters(parameters))
+                );
+                parent.printJson(response);
+                return parent.exitCodeFromState(response.state());
+            });
         }
     }
 
@@ -195,9 +212,11 @@ public final class BatchJobCli implements Runnable {
 
         @Override
         public Integer call() {
-            ActionResponse response = parent.service().stop(parent.namespace, jobName);
-            parent.printJson(response);
-            return parent.exitCodeFromState(response.state());
+            return parent.executeWithNotFoundHandling(() -> {
+                ActionResponse response = parent.service().stop(parent.namespace, jobName);
+                parent.printJson(response);
+                return parent.exitCodeFromState(response.state());
+            });
         }
     }
 
@@ -220,13 +239,15 @@ public final class BatchJobCli implements Runnable {
 
         @Override
         public Integer call() {
-            ActionResponse response = parent.service().restart(
-                parent.namespace,
-                jobName,
-                new RestartJobRequestVO(timeoutSeconds, keepFailedPods, parent.parseParameters(parameters))
-            );
-            parent.printJson(response);
-            return parent.exitCodeFromState(response.state());
+            return parent.executeWithNotFoundHandling(() -> {
+                ActionResponse response = parent.service().restart(
+                    parent.namespace,
+                    jobName,
+                    new RestartJobRequestVO(timeoutSeconds, keepFailedPods, parent.parseParameters(parameters))
+                );
+                parent.printJson(response);
+                return parent.exitCodeFromState(response.state());
+            });
         }
     }
 
@@ -249,35 +270,37 @@ public final class BatchJobCli implements Runnable {
 
         @Override
         public Integer call() {
-            if (!watch) {
-                JobStatusResponse status = parent.service().status(parent.namespace, jobName);
-                parent.printJson(status);
-                return parent.exitCodeFromPhase(status.phase());
-            }
-
-            if (intervalSeconds < 1) {
-                throw new IllegalArgumentException("--interval-seconds must be >= 1");
-            }
-
-            Instant started = Instant.now();
-            while (true) {
-                JobStatusResponse status = parent.service().status(parent.namespace, jobName);
-                parent.printJson(status);
-
-                String phase = status.phase();
-                if ("SUCCEEDED".equalsIgnoreCase(phase) || "FAILED".equalsIgnoreCase(phase)) {
-                    return parent.exitCodeFromPhase(phase);
+            return parent.executeWithNotFoundHandling(() -> {
+                if (!watch) {
+                    JobStatusResponse status = parent.service().status(parent.namespace, jobName);
+                    parent.printJson(status);
+                    return parent.exitCodeFromPhase(status.phase());
                 }
 
-                if (timeoutSeconds != null) {
-                    long elapsed = Duration.between(started, Instant.now()).toSeconds();
-                    if (elapsed >= timeoutSeconds) {
-                        return 124;
+                if (intervalSeconds < 1) {
+                    throw new IllegalArgumentException("--interval-seconds must be >= 1");
+                }
+
+                Instant started = Instant.now();
+                while (true) {
+                    JobStatusResponse status = parent.service().status(parent.namespace, jobName);
+                    parent.printJson(status);
+
+                    String phase = status.phase();
+                    if ("SUCCEEDED".equalsIgnoreCase(phase) || "FAILED".equalsIgnoreCase(phase)) {
+                        return parent.exitCodeFromPhase(phase);
                     }
-                }
 
-                parent.sleep(intervalSeconds * 1000);
-            }
+                    if (timeoutSeconds != null) {
+                        long elapsed = Duration.between(started, Instant.now()).toSeconds();
+                        if (elapsed >= timeoutSeconds) {
+                            return 124;
+                        }
+                    }
+
+                    parent.sleep(intervalSeconds * 1000);
+                }
+            });
         }
     }
 
@@ -300,13 +323,15 @@ public final class BatchJobCli implements Runnable {
 
         @Override
         public Integer call() {
-            RunActionResponseVO response = parent.templateService().createRun(
-                parent.namespace,
-                templateName,
-                new CreateRunRequestVO(clientRequestId, timeoutSeconds, parent.parseParameters(parameters))
-            );
-            parent.printJson(response);
-            return parent.exitCodeFromState(response.state());
+            return parent.executeWithNotFoundHandling(() -> {
+                RunActionResponseVO response = parent.templateService().createRun(
+                    parent.namespace,
+                    templateName,
+                    new CreateRunRequestVO(clientRequestId, timeoutSeconds, parent.parseParameters(parameters))
+                );
+                parent.printJson(response);
+                return parent.exitCodeFromState(response.state());
+            });
         }
     }
 
@@ -329,35 +354,37 @@ public final class BatchJobCli implements Runnable {
 
         @Override
         public Integer call() {
-            if (!watch) {
-                RunStatusResponseVO status = parent.templateService().status(parent.namespace, runName);
-                parent.printJson(status);
-                return parent.exitCodeFromPhase(status.phase());
-            }
-
-            if (intervalSeconds < 1) {
-                throw new IllegalArgumentException("--interval-seconds must be >= 1");
-            }
-
-            Instant started = Instant.now();
-            while (true) {
-                RunStatusResponseVO status = parent.templateService().status(parent.namespace, runName);
-                parent.printJson(status);
-
-                String phase = status.phase();
-                if ("SUCCEEDED".equalsIgnoreCase(phase) || "FAILED".equalsIgnoreCase(phase)) {
-                    return parent.exitCodeFromPhase(phase);
+            return parent.executeWithNotFoundHandling(() -> {
+                if (!watch) {
+                    RunStatusResponseVO status = parent.templateService().status(parent.namespace, runName);
+                    parent.printJson(status);
+                    return parent.exitCodeFromPhase(status.phase());
                 }
 
-                if (timeoutSeconds != null) {
-                    long elapsed = Duration.between(started, Instant.now()).toSeconds();
-                    if (elapsed >= timeoutSeconds) {
-                        return 124;
+                if (intervalSeconds < 1) {
+                    throw new IllegalArgumentException("--interval-seconds must be >= 1");
+                }
+
+                Instant started = Instant.now();
+                while (true) {
+                    RunStatusResponseVO status = parent.templateService().status(parent.namespace, runName);
+                    parent.printJson(status);
+
+                    String phase = status.phase();
+                    if ("SUCCEEDED".equalsIgnoreCase(phase) || "FAILED".equalsIgnoreCase(phase)) {
+                        return parent.exitCodeFromPhase(phase);
                     }
-                }
 
-                parent.sleep(intervalSeconds * 1000);
-            }
+                    if (timeoutSeconds != null) {
+                        long elapsed = Duration.between(started, Instant.now()).toSeconds();
+                        if (elapsed >= timeoutSeconds) {
+                            return 124;
+                        }
+                    }
+
+                    parent.sleep(intervalSeconds * 1000);
+                }
+            });
         }
     }
 
@@ -374,13 +401,15 @@ public final class BatchJobCli implements Runnable {
 
         @Override
         public Integer call() {
-            RunActionResponseVO response = parent.templateService().cancel(
-                parent.namespace,
-                runName,
-                new CancelRunRequestVO(deletePods)
-            );
-            parent.printJson(response);
-            return parent.exitCodeFromState(response.state());
+            return parent.executeWithNotFoundHandling(() -> {
+                RunActionResponseVO response = parent.templateService().cancel(
+                    parent.namespace,
+                    runName,
+                    new CancelRunRequestVO(deletePods)
+                );
+                parent.printJson(response);
+                return parent.exitCodeFromState(response.state());
+            });
         }
     }
 
@@ -402,6 +431,27 @@ public final class BatchJobCli implements Runnable {
             case "SUSPENDED" -> 3;
             default -> 4;
         };
+    }
+
+    private int executeWithNotFoundHandling(CommandAction action) {
+        try {
+            return action.run();
+        } catch (NoSuchElementException ex) {
+            return handleNotFound(ex);
+        }
+    }
+
+    private int handleNotFound(NoSuchElementException exception) {
+        String reason = exception.getMessage();
+        if (reason == null || reason.isBlank()) {
+            reason = "Resource not found";
+        }
+
+        String normalizedReason = reason.endsWith(".") ? reason.substring(0, reason.length() - 1) : reason;
+
+        cli().getErr().println(normalizedReason + ".");
+        cli().getErr().println("Possible causes: wrong namespace/name, resource cancelled or deleted, or removed after ttlSecondsAfterFinished.");
+        return 4;
     }
 
     private void sleep(long millis) {

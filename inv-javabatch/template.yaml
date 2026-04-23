@@ -20,7 +20,7 @@ parameters:
     value: inv-javabatch-config
   - name: TTL_SECONDS
     description: "Job TTL after completion"
-    value: "3600"
+    value: "300"
 objects:
   - apiVersion: batch/v1
     kind: Job

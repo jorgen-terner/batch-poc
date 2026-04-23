@@ -240,9 +240,19 @@ public class KubernetesJobGateway {
                 ex
             );
         } catch (IOException ex) {
+            if (isOcCommandUnavailable(ex)) {
+                throw new IllegalStateException(
+                    "OpenShift CLI 'oc' is not available. Install/configure 'oc' or use an existing Job name directly: "
+                        + namespace + "/" + templateName,
+                    ex
+                );
+            }
             LOG.debug("Failed to process as OpenShift Template (I/O error), falling back to direct Job lookup: {}", ex.getMessage());
         } catch (IllegalStateException ex) {
-            LOG.debug("Failed to process as OpenShift Template (invalid structure), falling back to direct Job lookup: {}", ex.getMessage());
+            throw new IllegalStateException(
+                "Failed to process OpenShift template " + namespace + "/" + templateName + ": " + ex.getMessage(),
+                ex
+            );
         }
 
         // Fallback: Läs direkt som Job
@@ -517,5 +527,17 @@ public class KubernetesJobGateway {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while waiting for Kubernetes operation", ex);
         }
+    }
+
+    private boolean isOcCommandUnavailable(IOException ex) {
+        String message = ex.getMessage();
+        if (message == null) {
+            return false;
+        }
+
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("cannot run program \"oc\"")
+            || normalized.contains("createprocess error=2")
+            || normalized.contains("no such file or directory");
     }
 }
