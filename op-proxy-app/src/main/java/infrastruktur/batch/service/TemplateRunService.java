@@ -10,6 +10,7 @@ import io.fabric8.kubernetes.api.model.batch.v1.JobStatus;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,20 +20,48 @@ import java.util.Map;
 @ApplicationScoped
 public class TemplateRunService {
     private static final Logger LOG = LoggerFactory.getLogger(TemplateRunService.class);
+    private static final long DEFAULT_CANCEL_GRACEFUL_POLL_INTERVAL_MILLIS = 1000L;
+    private static final int DEFAULT_CANCEL_GRACEFUL_MAX_ATTEMPTS = 20;
 
     private final KubernetesJobGateway kubernetesJobGateway;
     private final JobPhaseResolver jobPhaseResolver;
     private final JobMetricsReporter jobMetricsReporter;
+    private final long cancelGracefulPollIntervalMillis;
+    private final int cancelGracefulMaxAttempts;
 
     @Inject
     public TemplateRunService(
         KubernetesJobGateway kubernetesJobGateway,
         JobPhaseResolver jobPhaseResolver,
-        JobMetricsReporter jobMetricsReporter
+        JobMetricsReporter jobMetricsReporter,
+        @ConfigProperty(name = "batch.run.cancel.graceful.poll-interval-millis", defaultValue = "1000") long cancelGracefulPollIntervalMillis,
+        @ConfigProperty(name = "batch.run.cancel.graceful.max-attempts", defaultValue = "20") int cancelGracefulMaxAttempts
     ) {
         this.kubernetesJobGateway = kubernetesJobGateway;
         this.jobPhaseResolver = jobPhaseResolver;
         this.jobMetricsReporter = jobMetricsReporter;
+        if (cancelGracefulPollIntervalMillis < 1) {
+            throw new IllegalArgumentException("batch.run.cancel.graceful.poll-interval-millis must be >= 1");
+        }
+        if (cancelGracefulMaxAttempts < 1) {
+            throw new IllegalArgumentException("batch.run.cancel.graceful.max-attempts must be >= 1");
+        }
+        this.cancelGracefulPollIntervalMillis = cancelGracefulPollIntervalMillis;
+        this.cancelGracefulMaxAttempts = cancelGracefulMaxAttempts;
+    }
+
+    public TemplateRunService(
+        KubernetesJobGateway kubernetesJobGateway,
+        JobPhaseResolver jobPhaseResolver,
+        JobMetricsReporter jobMetricsReporter
+    ) {
+        this(
+            kubernetesJobGateway,
+            jobPhaseResolver,
+            jobMetricsReporter,
+            DEFAULT_CANCEL_GRACEFUL_POLL_INTERVAL_MILLIS,
+            DEFAULT_CANCEL_GRACEFUL_MAX_ATTEMPTS
+        );
     }
 
     public RunActionResponseVO createRun(String namespace, String templateName, CreateRunRequestVO request) {
@@ -113,13 +142,30 @@ public class TemplateRunService {
             LOG.warn("Could not suspend run {}/{} before cancel: {}", namespace, runName, ex.getMessage());
         }
 
-        int deletedActivePods = kubernetesJobGateway.deleteActivePods(namespace, runName);
+        int remainingActivePods = kubernetesJobGateway.waitForActivePodsToStop(
+            namespace,
+            runName,
+            cancelGracefulPollIntervalMillis,
+            cancelGracefulMaxAttempts
+        );
+
+        int deletedActivePods = 0;
+        if (remainingActivePods > 0) {
+            deletedActivePods = kubernetesJobGateway.deleteActivePods(namespace, runName);
+            LOG.warn(
+                "Graceful stop timeout for run {}/{} ({} active pod(s) remaining). Forced deletion removed {} active pod(s)",
+                namespace,
+                runName,
+                remainingActivePods,
+                deletedActivePods
+            );
+        }
 
         if (deletePods) {
             int deletedPods = kubernetesJobGateway.deletePods(namespace, runName);
             kubernetesJobGateway.deleteJob(namespace, runName);
             LOG.info(
-                "Cancelled run {}/{} (graceful stop), deleted {} pod(s) in total ({} active)",
+                "Cancelled run {}/{} (graceful stop), deleted {} pod(s) in total ({} force-deleted active)",
                 namespace,
                 runName,
                 deletedPods,
@@ -148,7 +194,7 @@ public class TemplateRunService {
 
         kubernetesJobGateway.deleteJobPreservingPods(namespace, runName);
         LOG.info(
-            "Cancelled run {}/{} (graceful stop), deleted {} active pod(s) and preserved terminal pods",
+            "Cancelled run {}/{} (graceful stop), force-deleted {} active pod(s) and preserved terminal pods",
             namespace,
             runName,
             deletedActivePods

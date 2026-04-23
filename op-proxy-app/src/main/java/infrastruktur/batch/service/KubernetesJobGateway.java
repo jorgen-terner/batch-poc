@@ -123,6 +123,28 @@ public class KubernetesJobGateway {
         return podNames.size();
     }
 
+    public int countActivePods(String namespace, String jobName) {
+        var podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
+        int activeCount = 0;
+        for (Pod pod : podList.getItems()) {
+            String phase = pod.getStatus() == null ? null : pod.getStatus().getPhase();
+            boolean terminal = "Succeeded".equalsIgnoreCase(phase) || "Failed".equalsIgnoreCase(phase);
+            if (!terminal) {
+                activeCount++;
+            }
+        }
+        return activeCount;
+    }
+
+    public int waitForActivePodsToStop(String namespace, String jobName, long pollIntervalMillis, int maxAttempts) {
+        int activeCount = countActivePods(namespace, jobName);
+        for (int i = 0; i < maxAttempts && activeCount > 0; i++) {
+            sleep(pollIntervalMillis);
+            activeCount = countActivePods(namespace, jobName);
+        }
+        return activeCount;
+    }
+
     public boolean hasIrrecoverablePodFailure(String namespace, String jobName) {
         var podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
         for (Pod pod : podList.getItems()) {

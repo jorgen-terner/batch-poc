@@ -110,7 +110,7 @@ oc process -f deployment-template.yaml \
 op-proxy-app behöver namespaced RBAC för att kunna styra suspended Jobs:
 
 - `batch/jobs`: `get`, `list`, `watch`, `create`, `update`, `patch`, `delete`
-- `core/pods`: `get`, `list`, `watch`
+- `core/pods`: `get`, `list`, `watch`, `delete`
 - `core/pods/log`: `get`, `list`, `watch`
 - `template.openshift.io/templates`: `get`, `list`, `watch` (v2 template-run)
 - `template.openshift.io/processedtemplates`: `create` (v2 server-side template processing)
