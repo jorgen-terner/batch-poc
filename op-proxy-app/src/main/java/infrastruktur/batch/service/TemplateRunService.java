@@ -7,6 +7,7 @@ import infrastruktur.batch.model.RunActionResponseVO;
 import infrastruktur.batch.model.RunStatusResponseVO;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobStatus;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.slf4j.Logger;
@@ -103,20 +104,64 @@ public class TemplateRunService {
     public RunActionResponseVO cancel(String namespace, String runName, CancelRunRequestVO request) {
         Job runJob = kubernetesJobGateway.requireJob(namespace, runName);
         boolean deletePods = request != null && Boolean.TRUE.equals(request.deletePods());
+        String templateName = resolveTemplateName(runJob);
+
+        // Best-effort stop signal before cancellation flow.
+        try {
+            kubernetesJobGateway.patchSuspend(namespace, runName, true);
+        } catch (KubernetesClientException ex) {
+            LOG.warn("Could not suspend run {}/{} before cancel: {}", namespace, runName, ex.getMessage());
+        }
+
+        int deletedActivePods = kubernetesJobGateway.deleteActivePods(namespace, runName);
 
         if (deletePods) {
             int deletedPods = kubernetesJobGateway.deletePods(namespace, runName);
             kubernetesJobGateway.deleteJob(namespace, runName);
-            LOG.info("Cancelled run {}/{} and deleted {} pod(s)", namespace, runName, deletedPods);
-            RunActionResponseVO response = action(namespace, resolveTemplateName(runJob), runName, "cancel", "CANCELLED", "Run cancelled and pods deleted");
-            reportRunAction(namespace, response.templateName(), runName, response, Map.of("deletedPods", (double) deletedPods));
+            LOG.info(
+                "Cancelled run {}/{} (graceful stop), deleted {} pod(s) in total ({} active)",
+                namespace,
+                runName,
+                deletedPods,
+                deletedActivePods
+            );
+            RunActionResponseVO response = action(
+                namespace,
+                templateName,
+                runName,
+                "cancel",
+                "CANCELLED",
+                "Run cancelled (graceful stop) and pods deleted"
+            );
+            reportRunAction(
+                namespace,
+                response.templateName(),
+                runName,
+                response,
+                Map.of(
+                    "deletedPods", (double) deletedPods,
+                    "deletedActivePods", (double) deletedActivePods
+                )
+            );
             return response;
         }
 
         kubernetesJobGateway.deleteJobPreservingPods(namespace, runName);
-        LOG.info("Cancelled run {}/{} and preserved pods", namespace, runName);
-        RunActionResponseVO response = action(namespace, resolveTemplateName(runJob), runName, "cancel", "CANCELLED", "Run cancelled and pods preserved");
-        reportRunAction(namespace, response.templateName(), runName, response, Map.of());
+        LOG.info(
+            "Cancelled run {}/{} (graceful stop), deleted {} active pod(s) and preserved terminal pods",
+            namespace,
+            runName,
+            deletedActivePods
+        );
+        RunActionResponseVO response = action(
+            namespace,
+            templateName,
+            runName,
+            "cancel",
+            "CANCELLED",
+            "Run cancelled (graceful stop), active pods deleted and terminal pods preserved"
+        );
+        reportRunAction(namespace, response.templateName(), runName, response, Map.of("deletedActivePods", (double) deletedActivePods));
         return response;
     }
 

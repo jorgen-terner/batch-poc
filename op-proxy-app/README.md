@@ -238,8 +238,8 @@ Validering av `parameters` i v2:
 - Dubbel `name` i samma request avvisas
 
 Cancel request:
-- `deletePods=true`: radera både Job och tillhörande pods
-- `deletePods=false` eller tom body: radera Job men behåll pods
+- `deletePods=true`: graceful stop (suspend + terminera aktiva pods), radera sedan Job och kvarvarande pods
+- `deletePods=false` eller tom body: graceful stop (suspend + terminera aktiva pods), radera Job och behåll terminala pods
 
 ### Flöde i v2
 
@@ -318,7 +318,7 @@ Exempel anrop:
 
 `create-run` accepterar `--client-request-id`, `--timeout-seconds` och upprepad `--parameter name=value`.
 `run-status` följer samma watch-beteende som v1-status.
-`cancel-run` raderar enbart Jobbet som default, och med `--delete-pods=true` raderas även pods.
+`cancel-run` gör graceful stop som default (terminerar aktiva pods och bevarar terminala pods). Med `--delete-pods=true` raderas även kvarvarande pods.
 
 Exit-koder (CI/CD):
 - `0` = `SUCCEEDED`
