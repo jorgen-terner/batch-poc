@@ -8,6 +8,7 @@ Java 21-applikation för att styra förskapade Kubernetes Jobs (suspended Jobs) 
 - Java Toolchain `21`
 - Logging via `SLF4J` (med Logback)
 - Kubernetes integration via Fabric8 Kubernetes Client
+- OpenShift Template-processing via Fabric8 OpenShift Client
 - HTTP API via Quarkus (REST + CDI)
 
 ## Koncept
@@ -165,6 +166,8 @@ Utöver legacy-API:t för suspended Jobs finns nu ett separat v2-API för templa
 
 Flödet utgår från en OpenShift Template-resurs i klustret. När klienten skapar en run processar op-proxy-app templaten, använder `metadata.name` från processad template som `runName`, applicerar eventuella parametrar som env-variabler och skapar ett nytt Job.
 
+Notis: implementationen använder båda API-varianterna. Jobs/pods hanteras via Kubernetes API, medan template-processing i v2 görs via OpenShift Template API (server-side processing med lokal fallback).
+
 Se [TEMPLATE-RUN-API-RFC.md](TEMPLATE-RUN-API-RFC.md) för bakgrund och migreringsidéer. README:n nedan beskriver den aktuella implementationen.
 
 ### HTTP-endpoints (v2)
@@ -172,6 +175,47 @@ Se [TEMPLATE-RUN-API-RFC.md](TEMPLATE-RUN-API-RFC.md) för bakgrund och migrerin
 - `POST /api/v2/templates/{templateName}/runs`
 - `GET /api/v2/runs/{runName}`
 - `POST /api/v2/runs/{runName}/cancel`
+
+### curl-exempel (v2)
+
+```bash
+# Sätt endpoint och resurser
+NAMESPACE=dev252
+BASE_URL="https://$(oc -n ${NAMESPACE} get route op-proxy-app -o jsonpath='{.spec.host}')"
+TEMPLATE_NAME="inv-javabatch-template"
+
+# 1) Create-run
+CREATE_RESPONSE=$(curl -sS -X POST "$BASE_URL/api/v2/templates/$TEMPLATE_NAME/runs" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  --data-raw '{
+    "clientRequestId": "manual-2026-04-23-001",
+    "timeoutSeconds": 1800,
+    "parameters": [
+      { "name": "runType", "value": "FULL" },
+      { "name": "businessDate", "value": "2026-04-23" }
+    ]
+  }')
+
+echo "$CREATE_RESPONSE"
+
+# Läs ut runName från create-svar (kräver jq)
+RUN_NAME=$(echo "$CREATE_RESPONSE" | jq -r '.runName')
+
+# 2) Run-status
+curl -sS -X GET "$BASE_URL/api/v2/runs/$RUN_NAME" \
+  -H "Accept: application/json"
+
+# 3) Cancel-run
+curl -sS -X POST "$BASE_URL/api/v2/runs/$RUN_NAME/cancel" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  --data-raw '{
+    "deletePods": false
+  }'
+```
+
+Om du inte vill använda `jq` kan du kopiera `runName` manuellt från create-responsen och använda den i status/cancel-anropen.
 
 ### Kontrakt
 
@@ -204,11 +248,11 @@ Cancel request:
 5. Klienten följer körningen via `GET /api/v2/runs/{runName}`.
 6. Vid behov avbryts körningen via `POST /api/v2/runs/{runName}/cancel`.
 
-### Telemetri för v2
+### Metrik för v2
 
 op-proxy-app exponerar inte längre endpoints för att läsa metrics eller ta emot explicita report-anrop.
 I stället skickar service-lagret generella Job/Run-händelser till en intern `JobMetricsReporter`.
-Just nu loggas dessa händelser via `slf4j`, vilket gör att formatet kan verifieras innan en extern produkt kopplas in.
+Just nu loggas dessa händelser via `slf4j` innan en extern produkt kopplas in.
 
 ## Legacy API (v1 suspended Jobs)
 

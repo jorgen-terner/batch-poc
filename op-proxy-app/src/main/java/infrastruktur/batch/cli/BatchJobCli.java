@@ -450,7 +450,7 @@ public final class BatchJobCli implements Runnable {
         String normalizedReason = reason.endsWith(".") ? reason.substring(0, reason.length() - 1) : reason;
 
         cli().getErr().println(normalizedReason + ".");
-        cli().getErr().println("Possible causes: wrong namespace/name, resource cancelled or deleted, or removed after ttlSecondsAfterFinished.");
+        cli().getErr().println("Possible causes: wrong namespace/name, resource cancelled, deleted or removed after ttlSecondsAfterFinished.");
         return 4;
     }
 

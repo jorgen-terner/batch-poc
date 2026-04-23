@@ -8,17 +8,18 @@ import io.fabric8.kubernetes.api.model.ManagedFieldsEntry;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodCondition;
 import io.fabric8.kubernetes.api.model.PodStatus;
+import io.fabric8.kubernetes.api.model.HasMetadata;
+import io.fabric8.kubernetes.api.model.KubernetesList;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobBuilder;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.utils.Serialization;
+import io.fabric8.openshift.client.OpenShiftClient;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -27,7 +28,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 @ApplicationScoped
 public class KubernetesJobGateway {
@@ -226,149 +226,110 @@ public class KubernetesJobGateway {
     }
 
     private Job loadJobFromTemplate(String namespace, String templateName) {
-        // Först, försöka läsa som OpenShift Template-resurs
-        try {
-            Job jobFromTemplate = processOpenShiftTemplate(namespace, templateName);
-            if (jobFromTemplate != null) {
-                LOG.info("Loaded Job from OpenShift Template: {}/{}", namespace, templateName);
-                return jobFromTemplate;
-            }
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException(
-                "Interrupted while processing OpenShift template: " + namespace + "/" + templateName,
-                ex
-            );
-        } catch (IOException ex) {
-            if (isOcCommandUnavailable(ex)) {
-                throw new IllegalStateException(
-                    "OpenShift CLI 'oc' is not available. Install/configure 'oc' or use an existing Job name directly: "
-                        + namespace + "/" + templateName,
-                    ex
-                );
-            }
-            LOG.debug("Failed to process as OpenShift Template (I/O error), falling back to direct Job lookup: {}", ex.getMessage());
-        } catch (IllegalStateException ex) {
-            throw new IllegalStateException(
-                "Failed to process OpenShift template " + namespace + "/" + templateName + ": " + ex.getMessage(),
-                ex
-            );
+        Job jobFromTemplate = processOpenShiftTemplate(namespace, templateName);
+        if (jobFromTemplate != null) {
+            LOG.info("Loaded Job from OpenShift Template: {}/{}", namespace, templateName);
+            return jobFromTemplate;
         }
 
-        // Fallback: Läs direkt som Job
-        LOG.debug("Looking for Job resource: {}/{}", namespace, templateName);
+        // Fallback används endast när Template-resursen saknas.
+        LOG.debug("Template not found, looking for Job resource instead: {}/{}", namespace, templateName);
         return requireJob(namespace, templateName);
     }
 
-    private Job processOpenShiftTemplate(String namespace, String templateName) throws IOException, InterruptedException {
-        // Kör: oc process <template-name> -n <namespace> -o yaml
-        // Timeout satt till 30 sekunder för att förhindra eternal waiting
-        ProcessBuilder pb = new ProcessBuilder(
-            "oc", "process", templateName,
-            "-n", namespace,
-            "-o", "yaml"
-        );
-        pb.redirectErrorStream(true);
+    private Job processOpenShiftTemplate(String namespace, String templateName) {
+        OpenShiftClient openShiftClient = adaptToOpenShiftClient();
+        var templateResource = openShiftClient.templates().inNamespace(namespace).withName(templateName);
+        var template = templateResource.get();
+        if (template == null) {
+            return null;
+        }
 
-        Process process = pb.start();
-        
-        // Vänta på process med timeout
-        boolean completed = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
-        if (!completed) {
-            process.destroy();
-            if (!process.waitFor(2, TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                process.waitFor(2, TimeUnit.SECONDS);
+        Map<String, String> templateParameters = Map.of("NAMESPACE", namespace);
+        KubernetesList processed;
+        try {
+            processed = templateResource.process(templateParameters);
+        } catch (KubernetesClientException ex) {
+            if (!shouldFallbackToLocalProcessing(ex)) {
+                throw ex;
             }
-            throw new IOException("oc process timed out after 30 seconds for template: " + namespace + "/" + templateName);
+            LOG.debug("Template server-side processing failed for {}/{} ({}), trying local processing",
+                namespace, templateName, ex.getMessage());
+            processed = templateResource.processLocally(templateParameters);
         }
 
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-        int exitCode = process.exitValue();
-
-        if (exitCode != 0) {
-            LOG.debug("oc process failed with exit code {}: {}", exitCode, output);
-            return null;
-        }
-
-        Job job = extractJobFromProcessedOutput(output);
-        if (job == null) {
-            LOG.warn("No Job found in processed Template output: {}/{}", namespace, templateName);
-            return null;
-        }
-
+        Job job = extractSingleJobFromProcessedList(processed);
         validateJobStructure(job);
         return job;
     }
 
-    private Job extractJobFromProcessedOutput(String output) {
-        final Object parsed;
+    private OpenShiftClient adaptToOpenShiftClient() {
         try {
-            parsed = Serialization.unmarshal(output, Object.class);
-        } catch (Exception ex) {
-            throw new IllegalStateException("Failed to parse YAML from oc process output: " + ex.getMessage(), ex);
+            return client.adapt(OpenShiftClient.class);
+        } catch (KubernetesClientException ex) {
+            throw new TemplateProcessingException(
+                "OpenShift client API is not available from current Kubernetes client: " + ex.getMessage(),
+                ex
+            );
         }
-
-        return extractJobFromNode(parsed);
     }
 
-    @SuppressWarnings("unchecked")
-    private Job extractJobFromNode(Object node) {
-        if (node == null) {
-            return null;
+    private boolean shouldFallbackToLocalProcessing(KubernetesClientException exception) {
+        int code = exception.getCode();
+        if (code == 404 || code == 405 || code == 501) {
+            return true;
         }
 
-        if (node instanceof List<?> list) {
-            for (Object item : list) {
-                Job job = extractJobFromNode(item);
-                if (job != null) {
-                    return job;
+        String message = exception.getMessage();
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("processedtemplates")
+            && (normalized.contains("not found")
+                || normalized.contains("method not allowed")
+                || normalized.contains("not implemented"));
+    }
+
+    private Job extractSingleJobFromProcessedList(KubernetesList processed) {
+        if (processed == null || processed.getItems() == null) {
+            throw new TemplateProcessingException("Processed template did not return any resources");
+        }
+
+        Job foundJob = null;
+        for (HasMetadata item : processed.getItems()) {
+            if (item instanceof Job job) {
+                if (foundJob != null) {
+                    throw new TemplateProcessingException("Processed template must contain exactly one Job");
                 }
-            }
-            return null;
-        }
-
-        if (!(node instanceof Map<?, ?> rawMap)) {
-            return null;
-        }
-
-        Map<String, Object> map = (Map<String, Object>) rawMap;
-        Object kind = map.get("kind");
-
-        if ("Job".equals(kind)) {
-            try {
-                return Serialization.unmarshal(Serialization.asJson(map), Job.class);
-            } catch (Exception ex) {
-                throw new IllegalStateException("Failed to parse Job from Template YAML: " + ex.getMessage(), ex);
+                foundJob = job;
             }
         }
 
-        Object items = map.get("items");
-        Job fromItems = extractJobFromNode(items);
-        if (fromItems != null) {
-            return fromItems;
+        if (foundJob == null) {
+            throw new TemplateProcessingException("Processed template does not contain a Job");
         }
 
-        Object objects = map.get("objects");
-        return extractJobFromNode(objects);
+        return foundJob;
     }
 
     private void validateJobStructure(Job job) {
         if (job == null) {
-            throw new IllegalStateException("Job object is null");
+            throw new TemplateProcessingException("Job object is null");
         }
         if (job.getMetadata() == null || job.getMetadata().getName() == null) {
-            throw new IllegalStateException("Job must have metadata.name");
+            throw new TemplateProcessingException("Job must have metadata.name");
         }
         if (job.getSpec() == null) {
-            throw new IllegalStateException("Job must have spec defined");
+            throw new TemplateProcessingException("Job must have spec defined");
         }
         if (job.getSpec().getTemplate() == null || job.getSpec().getTemplate().getSpec() == null) {
-            throw new IllegalStateException("Job must have spec.template.spec defined");
+            throw new TemplateProcessingException("Job must have spec.template.spec defined");
         }
         if (job.getSpec().getTemplate().getSpec().getContainers() == null 
             || job.getSpec().getTemplate().getSpec().getContainers().isEmpty()) {
-            throw new IllegalStateException("Job must define at least one container in spec.template.spec.containers");
+            throw new TemplateProcessingException("Job must define at least one container in spec.template.spec.containers");
         }
     }
 
@@ -456,7 +417,7 @@ public class KubernetesJobGateway {
     private String extractRequiredJobName(Job job) {
         String name = job == null || job.getMetadata() == null ? null : job.getMetadata().getName();
         if (name == null || name.isBlank()) {
-            throw new IllegalStateException("Template Job must define metadata.name");
+            throw new TemplateProcessingException("Template Job must define metadata.name");
         }
         return name;
     }
@@ -497,7 +458,7 @@ public class KubernetesJobGateway {
             || job.getSpec().getTemplate().getSpec() == null
             || job.getSpec().getTemplate().getSpec().getContainers() == null
             || job.getSpec().getTemplate().getSpec().getContainers().isEmpty()) {
-            throw new IllegalStateException("Job must define at least one container in spec.template.spec.containers");
+            throw new TemplateProcessingException("Job must define at least one container in spec.template.spec.containers");
         }
         List<EnvVar> env = job.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv();
         return env != null ? env : new ArrayList<>();
@@ -527,17 +488,5 @@ public class KubernetesJobGateway {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while waiting for Kubernetes operation", ex);
         }
-    }
-
-    private boolean isOcCommandUnavailable(IOException ex) {
-        String message = ex.getMessage();
-        if (message == null) {
-            return false;
-        }
-
-        String normalized = message.toLowerCase(Locale.ROOT);
-        return normalized.contains("cannot run program \"oc\"")
-            || normalized.contains("createprocess error=2")
-            || normalized.contains("no such file or directory");
     }
 }
