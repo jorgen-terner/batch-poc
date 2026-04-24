@@ -4,7 +4,6 @@ import infrastruktur.batch.metrics.JobMetricsReporter;
 import infrastruktur.batch.model.ExecutionActionResponseVO;
 import infrastruktur.batch.model.ExecutionStatusResponseVO;
 import infrastruktur.batch.model.StartExecutionRequestVO;
-import infrastruktur.batch.model.StopExecutionRequestVO;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobStatus;
 import io.fabric8.kubernetes.client.KubernetesClientException;
@@ -130,9 +129,8 @@ public class TemplateExecutionService {
         );
     }
 
-    public ExecutionActionResponseVO stop(String namespace, String executionName, StopExecutionRequestVO request) {
+    public ExecutionActionResponseVO stop(String namespace, String executionName) {
         Job executionJob = kubernetesJobGateway.requireJob(namespace, executionName);
-        boolean deletePods = request != null && Boolean.TRUE.equals(request.deletePods());
         String templateName = resolveTemplateName(executionJob);
 
         // Best-effort stop signal before stopping execution.
@@ -149,9 +147,8 @@ public class TemplateExecutionService {
             stopGracefulMaxAttempts
         );
 
-        int deletedActivePods = 0;
-        if (deletePods && remainingActivePods > 0) {
-            deletedActivePods = kubernetesJobGateway.deleteActivePods(namespace, executionName);
+        if (remainingActivePods > 0) {
+            int deletedActivePods = kubernetesJobGateway.deleteActivePods(namespace, executionName);
             LOG.warn(
                 "Graceful stop timeout for execution {}/{} ({} active pod(s) remaining). Forced deletion removed {} active pod(s)",
                 namespace,
@@ -161,40 +158,9 @@ public class TemplateExecutionService {
             );
         }
 
-        if (deletePods) {
-            int deletedPods = kubernetesJobGateway.deletePods(namespace, executionName);
-            kubernetesJobGateway.deleteJob(namespace, executionName);
-            LOG.info(
-                "Stopped execution {}/{} (graceful stop), deleted {} pod(s) in total ({} force-deleted active)",
-                namespace,
-                executionName,
-                deletedPods,
-                deletedActivePods
-            );
-            ExecutionActionResponseVO response = action(
-                namespace,
-                templateName,
-                executionName,
-                "stop",
-                "STOPPED",
-                "Execution stopped (graceful stop) and pods deleted"
-            );
-            reportExecutionAction(
-                namespace,
-                response.templateName(),
-                executionName,
-                response,
-                Map.of(
-                    "deletedPods", (double) deletedPods,
-                    "deletedActivePods", (double) deletedActivePods
-                )
-            );
-            return response;
-        }
-
-        kubernetesJobGateway.deleteJobPreservingPods(namespace, executionName);
+        kubernetesJobGateway.deleteJob(namespace, executionName);
         LOG.info(
-            "Stopped execution {}/{} (graceful stop), preserved active and terminal pods",
+            "Stopped execution {}/{} (graceful stop), execution job deleted",
             namespace,
             executionName
         );
@@ -204,9 +170,9 @@ public class TemplateExecutionService {
             executionName,
             "stop",
             "STOPPED",
-            "Execution stopped (graceful stop), active and terminal pods preserved"
+            "Execution stopped (graceful stop), execution job deleted"
         );
-        reportExecutionAction(namespace, response.templateName(), executionName, response, Map.of("deletedActivePods", (double) deletedActivePods));
+        reportExecutionAction(namespace, response.templateName(), executionName, response, Map.of());
         return response;
     }
 

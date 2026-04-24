@@ -65,13 +65,7 @@ Response (`ExecutionStatusResponseVO`):
 
 `POST /api/v2/executions/{executionName}/stop`
 
-Request body (`StopExecutionRequestVO`):
-
-```json
-{
-  "deletePods": false
-}
-```
+Ingen request body.
 
 Response (`ExecutionActionResponseVO`):
 
@@ -81,7 +75,7 @@ Response (`ExecutionActionResponseVO`):
   "executionName": "inv-javabatch-20260420101530-a1b2c3",
   "action": "stop",
   "state": "STOPPED",
-  "message": "Execution stopped",
+  "message": "Execution stopped (graceful stop), execution job deleted",
   "createdAt": "2026-04-20T10:20:00Z"
 }
 ```
@@ -102,9 +96,8 @@ Regler:
 Modelklasser under `infrastruktur.batch.model`:
 
 1. `StartExecutionRequestVO`
-2. `StopExecutionRequestVO`
-3. `ExecutionActionResponseVO`
-4. `ExecutionStatusResponseVO`
+2. `ExecutionActionResponseVO`
+3. `ExecutionStatusResponseVO`
 
 ## 4. Resurser och tjänster
 
