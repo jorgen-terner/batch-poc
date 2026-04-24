@@ -112,7 +112,7 @@ op-proxy-app behöver namespaced RBAC för att kunna styra suspended Jobs:
 - `batch/jobs`: `get`, `list`, `watch`, `create`, `update`, `patch`, `delete`
 - `core/pods`: `get`, `list`, `watch`, `delete`
 - `core/pods/log`: `get`, `list`, `watch`
-- `template.openshift.io/templates`: `get`, `list`, `watch` (v2 template-run)
+- `template.openshift.io/templates`: `get`, `list`, `watch` (v2 template-execution)
 - `template.openshift.io/processedtemplates`: `create` (v2 server-side template processing)
 
 RBAC är utbrutet i separat fil: `rbac-op-proxy-app.yaml`.
@@ -170,7 +170,7 @@ Flödet utgår från en OpenShift Template-resurs i klustret. När klienten star
 
 Notis: implementationen använder båda API-varianterna. Jobs/pods hanteras via Kubernetes API, medan template-processing i v2 görs via OpenShift Template API (server-side processing med lokal fallback).
 
-Se [TEMPLATE-RUN-API-RFC.md](TEMPLATE-RUN-API-RFC.md) för bakgrund och migreringsidéer. README:n nedan beskriver den aktuella implementationen.
+Se [TEMPLATE-EXECUTION-API-RFC.md](TEMPLATE-EXECUTION-API-RFC.md) för bakgrund och migreringsidéer. README:n nedan beskriver den aktuella implementationen.
 
 ### HTTP-endpoints (v2)
 
@@ -253,7 +253,7 @@ Stop request:
 ### Metrik för v2
 
 op-proxy-app exponerar inte längre endpoints för att läsa metrics eller ta emot explicita report-anrop.
-I stället skickar service-lagret generella Job/Run-händelser till en intern `JobMetricsReporter`.
+I stället skickar service-lagret generella Job/Execution-händelser till en intern `JobMetricsReporter`.
 Just nu loggas dessa händelser via `slf4j` innan en extern produkt kopplas in.
 
 ## Legacy API (v1 suspended Jobs)

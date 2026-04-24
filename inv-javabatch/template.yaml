@@ -3,7 +3,7 @@ kind: Template
 metadata:
   name: inv-javabatch-template
   annotations:
-    description: "Template Job for op-proxy-app v2 create-run"
+    description: "Template Job for op-proxy-app v2 start-execution"
 parameters:
   - name: NAMESPACE
     description: "OpenShift namespace where template Job is created"

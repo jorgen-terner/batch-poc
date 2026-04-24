@@ -109,7 +109,7 @@ oc logs -f job/testapp1-run-<id> -n dev252
 ============================================================
 TEST BATCH APPLICATION STARTED
 Timestamp: 2026-03-12T10:00:00
-Run ID: default
+Execution ID: default
 Configuration:
   - Simulation Steps: 5
   - Delay Between Steps: 2 seconds
@@ -153,7 +153,7 @@ Configuration:
   - Delay Between Steps: 2 seconds <- From ConfigMap
   - Log Level: INFO                <- From ConfigMap
   - Batch Size: 100                <- From ConfigMap
-Run ID: batch-20260312-special   <- Extra env var
+Execution ID: batch-20260312-special   <- Extra env var
 ```
 
 ## Skapa En Ny Batch-App (t.ex. inf-batch-testapp2)
