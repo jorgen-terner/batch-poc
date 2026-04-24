@@ -41,8 +41,8 @@ Byt `dev252` till ditt namespace.
 
 ## 3. Skapa template-jobb för op-proxy-app v2
 
-`op-proxy-app` v2 (`POST /api/v2/templates/{templateName}/runs`) kan läsa en OpenShift Template-resurs direkt och skapa Job-objektet från den.
-Job-namnet kommer från `metadata.name` i processad template (inte från op-proxy-app).
+`op-proxy-app` v2 (`POST /api/v2/templates/{templateName}/start`) kan läsa en OpenShift Template-resurs direkt och skapa Job-objektet från den.
+`executionName` kommer från `metadata.name` i processad template (inte från op-proxy-app).
 
 ### Steg 1: Registrera OpenShift Template
 
@@ -50,20 +50,20 @@ Job-namnet kommer från `metadata.name` i processad template (inte från op-prox
 oc apply -f inv-javabatch/template.yaml
 ```
 
-Det är allt du behöver göra. op-proxy-app v2 kommer att läsa denna Template och skapa ett Job vid varje `create-run`.
+Det är allt du behöver göra. op-proxy-app v2 kommer att läsa denna Template och skapa ett Job vid varje `start-execution`.
 
-### Steg 2: Skapa runs via op-proxy-app v2
+### Steg 2: Starta executions via op-proxy-app v2
 
-Skapa runs direkt genom att använda Template-namnet:
+Starta executions direkt genom att använda Template-namnet:
 
 ```bash
-.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 start-execution inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
 ```
 
 Eller med curl:
 
 ```bash
-curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-template/runs" \
+curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-template/start" \
   -H "Content-Type: application/json" \
   -d '{
     "clientRequestId": "inv-4711",
@@ -74,7 +74,7 @@ curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-template/r
   }'
 ```
 
-Vid varje `create-run` kommer op-proxy-app att:
+Vid varje `start-execution` kommer op-proxy-app att:
 1. Läsa OpenShift Template `inv-javabatch-template`
 2. Köra `oc process inv-javabatch-template` för att generera Job-manifest
 3. Skapa Job-objektet med namnet från `metadata.name` i templaten
@@ -161,8 +161,8 @@ Om du vill starta och styra suspended/template-jobb via op-proxy-app kan du anv�
 # v1 legacy (suspended Jobs)
 .\gradlew :op-proxy-app:runCli --args="--namespace dev252 start inv-javabatch-suspended --timeout-seconds 900"
 
-# v2 template/run
-.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
+# v2 template/execution
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 start-execution inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
 ```
 
 Se `op-proxy-app/README.md` för fullständig beskrivning av HTTP-API och komplett CLI-dokumentation (v1 + v2).

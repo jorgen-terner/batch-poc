@@ -1,5 +1,5 @@
 package infrastruktur.batch.model;
 
-public record CancelRunRequestVO(
+public record StopExecutionRequestVO(
     Boolean deletePods
 ) {}

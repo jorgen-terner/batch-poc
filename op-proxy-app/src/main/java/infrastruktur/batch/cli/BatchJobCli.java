@@ -1,18 +1,18 @@
 package infrastruktur.batch.cli;
 
 import infrastruktur.batch.model.ActionResponse;
-import infrastruktur.batch.model.CancelRunRequestVO;
-import infrastruktur.batch.model.CreateRunRequestVO;
+import infrastruktur.batch.model.ExecutionActionResponseVO;
+import infrastruktur.batch.model.ExecutionStatusResponseVO;
+import infrastruktur.batch.model.StopExecutionRequestVO;
+import infrastruktur.batch.model.StartExecutionRequestVO;
 import infrastruktur.batch.model.JobParameterVO;
 import infrastruktur.batch.model.RestartJobRequestVO;
-import infrastruktur.batch.model.RunActionResponseVO;
-import infrastruktur.batch.model.RunStatusResponseVO;
 import infrastruktur.batch.model.StartJobRequestVO;
 import infrastruktur.batch.model.JobStatusResponse;
 import infrastruktur.batch.service.JobControlService;
 import infrastruktur.batch.service.JobPhaseResolver;
 import infrastruktur.batch.service.KubernetesJobGateway;
-import infrastruktur.batch.service.TemplateRunService;
+import infrastruktur.batch.service.TemplateExecutionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -45,9 +45,9 @@ import java.util.concurrent.Callable;
         BatchJobCli.StopCommand.class,
         BatchJobCli.RestartCommand.class,
         BatchJobCli.StatusCommand.class,
-        BatchJobCli.CreateRunCommand.class,
-        BatchJobCli.RunStatusCommand.class,
-        BatchJobCli.CancelRunCommand.class
+        BatchJobCli.StartExecutionCommand.class,
+        BatchJobCli.ExecutionStatusCommand.class,
+        BatchJobCli.StopExecutionCommand.class
     }
 )
 public final class BatchJobCli implements Runnable {
@@ -65,7 +65,7 @@ public final class BatchJobCli implements Runnable {
     private CommandLine commandLine;
     private KubernetesClient kubernetesClient;
     private JobControlService jobControlService;
-    private TemplateRunService templateRunService;
+    private TemplateExecutionService templateExecutionService;
 
     public static void main(String[] args) {
         BatchJobCli root = new BatchJobCli();
@@ -91,19 +91,19 @@ public final class BatchJobCli implements Runnable {
         return jobControlService;
     }
 
-    private TemplateRunService templateService() {
-        if (templateRunService == null) {
+    private TemplateExecutionService templateService() {
+        if (templateExecutionService == null) {
             if (kubernetesClient == null) {
                 kubernetesClient = new KubernetesClientBuilder().build();
             }
-            templateRunService = new TemplateRunService(
+            templateExecutionService = new TemplateExecutionService(
                 new KubernetesJobGateway(kubernetesClient),
                 new JobPhaseResolver(),
                 (namespace, scope, name, status, metrics, attributes) -> {
                 }
             );
         }
-        return templateRunService;
+        return templateExecutionService;
     }
 
     private void printJson(Object payload) {
@@ -304,8 +304,8 @@ public final class BatchJobCli implements Runnable {
         }
     }
 
-    @Command(name = "create-run", description = "Create a run from a template Job (v2)")
-    static final class CreateRunCommand implements Callable<Integer> {
+    @Command(name = "start-execution", description = "Start an execution from a template (v2)")
+    static final class StartExecutionCommand implements Callable<Integer> {
         @CommandLine.ParentCommand
         private BatchJobCli parent;
 
@@ -318,16 +318,16 @@ public final class BatchJobCli implements Runnable {
         @Option(names = {"--timeout-seconds"}, description = "Optional max runtime (activeDeadlineSeconds)")
         private Long timeoutSeconds;
 
-        @Option(names = {"-p", "--parameter"}, description = "Run parameter as name=value (repeat option for multiple values)")
+        @Option(names = {"-p", "--parameter"}, description = "Execution parameter as name=value (repeat option for multiple values)")
         private List<String> parameters;
 
         @Override
         public Integer call() {
             return parent.executeWithNotFoundHandling(() -> {
-                RunActionResponseVO response = parent.templateService().createRun(
+                ExecutionActionResponseVO response = parent.templateService().start(
                     parent.namespace,
                     templateName,
-                    new CreateRunRequestVO(clientRequestId, timeoutSeconds, parent.parseParameters(parameters))
+                    new StartExecutionRequestVO(clientRequestId, timeoutSeconds, parent.parseParameters(parameters))
                 );
                 parent.printJson(response);
                 return parent.exitCodeFromState(response.state());
@@ -335,13 +335,13 @@ public final class BatchJobCli implements Runnable {
         }
     }
 
-    @Command(name = "run-status", description = "Get run status (v2, optionally watch until terminal state)")
-    static final class RunStatusCommand implements Callable<Integer> {
+    @Command(name = "execution-status", description = "Get execution status (v2, optionally watch until terminal state)")
+    static final class ExecutionStatusCommand implements Callable<Integer> {
         @CommandLine.ParentCommand
         private BatchJobCli parent;
 
-        @Parameters(index = "0", description = "Run name")
-        private String runName;
+        @Parameters(index = "0", description = "Execution name")
+        private String executionName;
 
         @Option(names = {"-w", "--watch"}, description = "Poll status until SUCCEEDED or FAILED")
         private boolean watch;
@@ -356,7 +356,7 @@ public final class BatchJobCli implements Runnable {
         public Integer call() {
             return parent.executeWithNotFoundHandling(() -> {
                 if (!watch) {
-                    RunStatusResponseVO status = parent.templateService().status(parent.namespace, runName);
+                    ExecutionStatusResponseVO status = parent.templateService().status(parent.namespace, executionName);
                     parent.printJson(status);
                     return parent.exitCodeFromPhase(status.phase());
                 }
@@ -367,7 +367,7 @@ public final class BatchJobCli implements Runnable {
 
                 Instant started = Instant.now();
                 while (true) {
-                    RunStatusResponseVO status = parent.templateService().status(parent.namespace, runName);
+                    ExecutionStatusResponseVO status = parent.templateService().status(parent.namespace, executionName);
                     parent.printJson(status);
 
                     String phase = status.phase();
@@ -388,24 +388,24 @@ public final class BatchJobCli implements Runnable {
         }
     }
 
-    @Command(name = "cancel-run", description = "Cancel a run (v2)")
-    static final class CancelRunCommand implements Callable<Integer> {
+    @Command(name = "stop-execution", description = "Stop an execution (v2)")
+    static final class StopExecutionCommand implements Callable<Integer> {
         @CommandLine.ParentCommand
         private BatchJobCli parent;
 
-        @Parameters(index = "0", description = "Run name")
-        private String runName;
+        @Parameters(index = "0", description = "Execution name")
+        private String executionName;
 
-        @Option(names = {"--delete-pods"}, defaultValue = "false", description = "Delete pods together with the run Job")
+        @Option(names = {"--delete-pods"}, defaultValue = "false", description = "Delete pods together with the execution Job")
         private boolean deletePods;
 
         @Override
         public Integer call() {
             return parent.executeWithNotFoundHandling(() -> {
-                RunActionResponseVO response = parent.templateService().cancel(
+                ExecutionActionResponseVO response = parent.templateService().stop(
                     parent.namespace,
-                    runName,
-                    new CancelRunRequestVO(deletePods)
+                    executionName,
+                    new StopExecutionRequestVO(deletePods)
                 );
                 parent.printJson(response);
                 return parent.exitCodeFromState(response.state());
@@ -415,7 +415,7 @@ public final class BatchJobCli implements Runnable {
 
     private int exitCodeFromState(String state) {
         return switch (JobPhaseResolver.normalize(state)) {
-            case "SUCCEEDED", "CANCELLED" -> 0;
+            case "SUCCEEDED", "CANCELLED", "STOPPED" -> 0;
             case "RUNNING", "PENDING" -> 10;
             case "FAILED" -> 2;
             case "SUSPENDED" -> 3;
@@ -425,7 +425,7 @@ public final class BatchJobCli implements Runnable {
 
     private int exitCodeFromPhase(String phase) {
         return switch (JobPhaseResolver.normalize(phase)) {
-            case "SUCCEEDED", "CANCELLED" -> 0;
+            case "SUCCEEDED", "CANCELLED", "STOPPED" -> 0;
             case "RUNNING", "PENDING" -> 10;
             case "FAILED" -> 2;
             case "SUSPENDED" -> 3;
@@ -450,7 +450,7 @@ public final class BatchJobCli implements Runnable {
         String normalizedReason = reason.endsWith(".") ? reason.substring(0, reason.length() - 1) : reason;
 
         cli().getErr().println(normalizedReason + ".");
-        cli().getErr().println("Possible causes: wrong namespace/name, resource cancelled, deleted or removed after ttlSecondsAfterFinished.");
+        cli().getErr().println("Possible causes: wrong namespace/name, resource stopped, deleted or removed after ttlSecondsAfterFinished.");
         return 4;
     }
 

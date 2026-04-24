@@ -102,7 +102,7 @@ Skapar en ny jobbkörning med samma grundkonfiguration som ursprungsjobbet (conf
 
 ## op-proxy-app CLI-exempel (v1 och v2)
 
-För batchflöden via `op-proxy-app` finns både legacy v1 (suspended Jobs) och v2 (template/run).
+För batchflöden via `op-proxy-app` finns både legacy v1 (suspended Jobs) och v2 (template/execution).
 
 Snabbexempel från projektroten:
 
@@ -113,8 +113,8 @@ Snabbexempel från projektroten:
 # v1: starta suspended Job
 .\gradlew :op-proxy-app:runCli --args="--namespace dev252 start inv-javabatch-suspended --timeout-seconds 900"
 
-# v2: skapa körning från template
-.\gradlew :op-proxy-app:runCli --args="--namespace dev252 create-run inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
+# v2: starta execution från template
+.\gradlew :op-proxy-app:runCli --args="--namespace dev252 start-execution inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
 ```
 
 `op-proxy-app/README.md` är source of truth för full CLI-dokumentation (v1 + v2), parametrar och fler exempel.

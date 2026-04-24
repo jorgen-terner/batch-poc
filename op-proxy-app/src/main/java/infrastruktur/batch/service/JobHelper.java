@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Shared stateless helpers used by both {@link JobControlService} and {@link TemplateRunService}.
+ * Shared stateless helpers used by both {@link JobControlService} and {@link TemplateExecutionService}.
  */
 final class JobHelper {
 

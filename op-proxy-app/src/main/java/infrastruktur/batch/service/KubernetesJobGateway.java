@@ -34,6 +34,7 @@ public class KubernetesJobGateway {
     private static final Logger LOG = LoggerFactory.getLogger(KubernetesJobGateway.class);
     
     public static final String TEMPLATE_NAME_LABEL = "batch.template-name";
+    public static final String EXECUTION_NAME_LABEL = "batch.execution-name";
     public static final String RUN_NAME_LABEL = "batch.run-name";
 
     private static final List<String> RECREATED_TEMPLATE_LABEL_KEYS_TO_REMOVE = List.of(
@@ -394,17 +395,18 @@ public class KubernetesJobGateway {
         return builder.build();
     }
 
-    public Job createRunFromTemplate(String namespace, String templateName, Long timeoutSeconds, Map<String, String> parameters) {
+    public Job createExecutionFromTemplate(String namespace, String templateName, Long timeoutSeconds, Map<String, String> parameters) {
         Job templateJob = loadJobFromTemplate(namespace, templateName);
-        String runName = extractRequiredJobName(templateJob);
+        String executionName = extractRequiredJobName(templateJob);
         List<EnvVar> existingEnv = getFirstContainerEnvOrThrow(templateJob);
         Map<String, String> runLabels = sanitizeTemplateLabels(templateJob);
         runLabels.put(TEMPLATE_NAME_LABEL, templateName);
-        runLabels.put(RUN_NAME_LABEL, runName);
+        runLabels.put(EXECUTION_NAME_LABEL, executionName);
+        runLabels.put(RUN_NAME_LABEL, executionName);
 
         JobBuilder builder = new JobBuilder(templateJob)
             .editOrNewMetadata()
-            .withName(runName)
+            .withName(executionName)
             .withNamespace(namespace)
             .withResourceVersion(null)
             .withUid(null)
@@ -412,7 +414,8 @@ public class KubernetesJobGateway {
             .withGeneration(null)
             .withManagedFields((List<ManagedFieldsEntry>) null)
             .addToLabels(TEMPLATE_NAME_LABEL, templateName)
-            .addToLabels(RUN_NAME_LABEL, runName)
+            .addToLabels(EXECUTION_NAME_LABEL, executionName)
+            .addToLabels(RUN_NAME_LABEL, executionName)
             .endMetadata()
             .withStatus(null)
             .editOrNewSpec()

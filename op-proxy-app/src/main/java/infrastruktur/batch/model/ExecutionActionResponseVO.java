@@ -2,10 +2,10 @@ package infrastruktur.batch.model;
 
 import java.time.Instant;
 
-public record RunActionResponseVO(
+public record ExecutionActionResponseVO(
     String namespace,
     String templateName,
-    String runName,
+    String executionName,
     String clientRequestId,
     String action,
     String state,

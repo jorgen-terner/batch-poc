@@ -2,10 +2,10 @@ package infrastruktur.batch.model;
 
 import java.time.Instant;
 
-public record RunStatusResponseVO(
+public record ExecutionStatusResponseVO(
     String namespace,
     String templateName,
-    String runName,
+    String executionName,
     String phase,
     int activePods,
     int succeededPods,
