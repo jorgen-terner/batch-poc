@@ -3,7 +3,6 @@ package infrastruktur.batch.api;
 import infrastruktur.batch.model.ExecutionActionResponseVO;
 import infrastruktur.batch.model.ExecutionStatusResponseVO;
 import infrastruktur.batch.model.StartExecutionRequestVO;
-import infrastruktur.batch.model.StopExecutionRequestVO;
 import infrastruktur.batch.service.TemplateExecutionService;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import jakarta.inject.Inject;
@@ -47,10 +46,7 @@ public class TemplateExecutionResource {
 
     @POST
     @Path("api/v2/executions/{executionName}/stop")
-    public ExecutionActionResponseVO stop(
-        @jakarta.ws.rs.PathParam("executionName") String executionName,
-        StopExecutionRequestVO request
-    ) {
-        return templateExecutionService.stop(namespace, executionName, request);
+    public ExecutionActionResponseVO stop(@jakarta.ws.rs.PathParam("executionName") String executionName) {
+        return templateExecutionService.stop(namespace, executionName);
     }
 }

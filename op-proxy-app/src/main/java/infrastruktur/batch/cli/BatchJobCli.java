@@ -3,7 +3,6 @@ package infrastruktur.batch.cli;
 import infrastruktur.batch.model.ActionResponse;
 import infrastruktur.batch.model.ExecutionActionResponseVO;
 import infrastruktur.batch.model.ExecutionStatusResponseVO;
-import infrastruktur.batch.model.StopExecutionRequestVO;
 import infrastruktur.batch.model.StartExecutionRequestVO;
 import infrastruktur.batch.model.JobParameterVO;
 import infrastruktur.batch.model.RestartJobRequestVO;
@@ -396,16 +395,12 @@ public final class BatchJobCli implements Runnable {
         @Parameters(index = "0", description = "Execution name")
         private String executionName;
 
-        @Option(names = {"--delete-pods"}, defaultValue = "false", description = "Delete pods together with the execution Job")
-        private boolean deletePods;
-
         @Override
         public Integer call() {
             return parent.executeWithNotFoundHandling(() -> {
                 ExecutionActionResponseVO response = parent.templateService().stop(
                     parent.namespace,
-                    executionName,
-                    new StopExecutionRequestVO(deletePods)
+                    executionName
                 );
                 parent.printJson(response);
                 return parent.exitCodeFromState(response.state());

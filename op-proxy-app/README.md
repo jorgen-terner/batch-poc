@@ -1,19 +1,22 @@
 # op-proxy-app
 
-Java 21-applikation för att styra förskapade Kubernetes Jobs (suspended Jobs) via REST API.
+Java 21-applikation för att styra batch-körningar i Kubernetes/OpenShift via REST API.
+
+Appen stödjer två modeller:
+- Legacy v1: styrning av förskapade suspended Jobs
+- Nuvarande v2: template/run-flöde där nya Jobs skapas från ett template-Job
 
 ## Teknikval
 
-- Gradle Wrapper `9.0.0`
-- Java Toolchain `21`
-- Logging via `SLF4J` (med Logback)
 - Kubernetes integration via Fabric8 Kubernetes Client
 - OpenShift Template-processing via Fabric8 OpenShift Client
 - HTTP API via Quarkus (REST + CDI)
 
 ## Koncept
 
-I stället för att skapa nya Jobs med image/version vid varje körning, utgår appen från att Job redan finns i Kubernetes med:
+op-proxy-app innehåller både ett äldre suspended-job-flöde och ett nyare template/run-flöde.
+
+I legacy-v1 utgår appen från att Job redan finns i Kubernetes med:
 
 ```yaml
 spec:
@@ -21,6 +24,8 @@ spec:
 ```
 
 API:et ändrar sedan Job-state genom att patcha `spec.suspend` och hantera pods.
+
+I v2 används i stället ett befintligt template-Job som källa. Vid varje ny körning kopierar appen template-jobbet, genererar ett nytt `runName`, applicerar parametrar och skapar ett nytt Job i klustret.
 
 ## Starta lokalt (Quarkus)
 
@@ -36,84 +41,37 @@ Bygg jar:
 
 ## Deploy till OpenShift
 
-### Förutsättningar
-
-- OpenShift CLI (`oc`) installerad och konfigurerad
-- Inloggad i OpenShift-klustret: `oc login <cluster-url>`
-
-### Automatisk deploy (rekommenderat)
-
-Använd deploy-scriptet för att bygga och deploya appen:
-
-```bash
-chmod +x ./setup-openshift.sh
-./setup-openshift.sh [NAMESPACE] [IMAGE_TAG]
-```
-
-**Exempel:**
-
-```bash
-# Deploy till standardnamespace med tag 'latest'
-./setup-openshift.sh batch-jobs latest
-
-# Deploy till namespace 'production' med version 'v0.1.0'
-./setup-openshift.sh production v0.1.0
-```
-
-Scriptet gör följande:
-1. Bygger appen lokalt (`./gradlew build`)
-2. Skapar namespace (om det inte finns)
-3. Bygger containerimagen via OpenShift BuildConfig
-4. Applicerar ServiceAccount och RBAC från `rbac-op-proxy-app.yaml`
-5. Deployar op-proxy-app med Service och Route
-
 ### Manuell deploy
 
-**1. Bygga jar lokalt:**
-
 ```bash
-./gradlew clean build
+# Skapa BuildConfig (en gång) - viktigt med --to för att tagga automatiskt!
+oc new-build --binary --name=op-proxy --strategy=docker --to=op-proxy:latest -n dev252
+
+# Bygg från modulkatalogen med färdigbyggda artifacts
+cd op-proxy-app
+oc start-build op-proxy --from-dir=. --follow -n dev252
+
+# Deploya med template (inkluderar Deployment + Service)
+cd ..
+oc process -f deployment-template.yaml -p NAMESPACE=dev252 | oc apply -f -
 ```
 
-**2. Bygg image via OpenShift BuildConfig:**
+**3. Applicera RBAC (Role + RoleBinding):**
 
 ```bash
-# Skapa BuildConfig (en gång)
-oc -n batch-jobs new-build --binary --name=op-proxy-app --strategy=docker --to=op-proxy-app:latest
-
-# Säkerställ att builden använder Dockerfile i denna modul
-oc -n batch-jobs patch bc/op-proxy-app -p '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"op-proxy-app/Dockerfile"}}}}'
-
-# Starta build från repo-roten
-oc -n batch-jobs start-build op-proxy-app --from-dir=. --follow
-```
-
-**3. Applicera RBAC (ServiceAccount + Role + RoleBinding):**
-
-```bash
-oc -n batch-jobs apply -f rbac-op-proxy-app.yaml
-```
-
-**4. Deploy via template:**
-
-```bash
-oc new-project batch-jobs 2>/dev/null || oc project batch-jobs
-
-oc process -f deployment-template.yaml \
-  -p NAMESPACE=batch-jobs \
-  -p SERVICE_ACCOUNT_NAME=duplosa \
-  -p IMAGE_TAG=latest | oc apply -f -
+oc apply -f rbac-op-proxy-app.yaml
 ```
 
 ### RBAC-rättigheter som behövs
 
-op-proxy-app behöver namespaced RBAC för att kunna styra suspended Jobs:
+op-proxy-app behöver namespaced RBAC för att kunna styra både legacy suspended Jobs och v2 template/run-körningar:
 
 - `batch/jobs`: `get`, `list`, `watch`, `create`, `update`, `patch`, `delete`
 - `core/pods`: `get`, `list`, `watch`, `delete`
 - `core/pods/log`: `get`, `list`, `watch`
-- `template.openshift.io/templates`: `get`, `list`, `watch` (v2 template-execution)
+- `template.openshift.io/templates`: `get`, `list`, `watch` (v2 template-run)
 - `template.openshift.io/processedtemplates`: `create` (v2 server-side template processing)
+
 
 RBAC är utbrutet i separat fil: `rbac-op-proxy-app.yaml`.
 
@@ -132,31 +90,6 @@ oc -n batch-jobs get route op-proxy-app -o jsonpath='{.spec.host}'
 # Test hälsostatus
 curl https://$(oc -n batch-jobs get route op-proxy-app -o jsonpath='{.spec.host}')/q/health/ready
 ```
-
-### Använda deploy-mallen manuellt
-
-Deployment-mallen `deployment-template.yaml` kan användas för att deploya med egna parametrar:
-
-```bash
-oc process -f deployment-template.yaml \
-  -p NAMESPACE=production \
-  -p SERVICE_ACCOUNT_NAME=duplosa \
-  -p IMAGE_TAG=v0.1.0 \
-  -p CPU_LIMIT=1000m \
-  -p MEMORY_LIMIT=1Gi | oc apply -f -
-
-# Skala upp vid behov
-oc -n production scale deployment/op-proxy-app --replicas=2
-```
-
-**Tillgängliga parametrar:**
-- `NAMESPACE` - Target namespace (default: batch-jobs)
-- `IMAGE_TAG` - Bildversion (default: latest)
-- `SERVICE_ACCOUNT_NAME` - ServiceAccount som deploymenten kör som (default: duplosa)
-- `CPU_REQUEST` - CPU request (default: 100m)
-- `CPU_LIMIT` - CPU limit (default: 500m)
-- `MEMORY_REQUEST` - Memory request (default: 256Mi)
-- `MEMORY_LIMIT` - Memory limit (default: 512Mi)
 
 ## API (HTTP och CLI)
 
@@ -181,15 +114,8 @@ Se [TEMPLATE-EXECUTION-API-RFC.md](TEMPLATE-EXECUTION-API-RFC.md) för bakgrund 
 ### curl-exempel (v2)
 
 ```bash
-# Sätt endpoint och resurser
-NAMESPACE=dev252
-BASE_URL="https://$(oc -n ${NAMESPACE} get route op-proxy-app -o jsonpath='{.spec.host}')"
-TEMPLATE_NAME="inv-javabatch-template"
-
 # 1) Start execution
-START_RESPONSE=$(curl -sS -X POST "$BASE_URL/api/v2/templates/$TEMPLATE_NAME/start" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
+curl -sS -X POST "http://localhost:8080/api/v2/templates/$TEMPLATE_NAME/start" -H "Content-Type: application/json"
   --data-raw '{
     "clientRequestId": "manual-2026-04-23-001",
     "timeoutSeconds": 1800,
@@ -197,27 +123,17 @@ START_RESPONSE=$(curl -sS -X POST "$BASE_URL/api/v2/templates/$TEMPLATE_NAME/sta
       { "name": "runType", "value": "FULL" },
       { "name": "businessDate", "value": "2026-04-23" }
     ]
-  }')
+  }'
 
-echo "$START_RESPONSE"
 
-# Läs ut executionName från start-svar (kräver jq)
-EXECUTION_NAME=$(echo "$START_RESPONSE" | jq -r '.executionName')
+Läs ut executionName från start-svar
 
 # 2) Execution status
-curl -sS -X GET "$BASE_URL/api/v2/executions/$EXECUTION_NAME" \
-  -H "Accept: application/json"
+curl -sS -X GET "http://localhost:8080/api/v2/executions/$EXECUTION_NAME"
 
 # 3) Stop execution
-curl -sS -X POST "$BASE_URL/api/v2/executions/$EXECUTION_NAME/stop" \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  --data-raw '{
-    "deletePods": false
-  }'
+curl -sS -X POST "http://localhost:8080/api/v2/executions/$EXECUTION_NAME/stop"
 ```
-
-Om du inte vill använda `jq` kan du kopiera `executionName` manuellt från start-responsen och använda den i status- och stop-anropen.
 
 ### Kontrakt
 
@@ -238,8 +154,8 @@ Validering av `parameters` i v2:
 - Dubbel `name` i samma request avvisas
 
 Stop request:
-- `deletePods=true`: graceful stop (suspend + terminera aktiva pods), radera sedan Job och kvarvarande pods
-- `deletePods=false` eller tom body: graceful stop, radera Job och behåll aktiva och terminala pods
+- Ingen request body
+- Stop utför alltid graceful stop (suspend), väntar en kort stund på att aktiva pods ska stanna och raderar sedan execution-Jobbet
 
 ### Flöde i v2
 
@@ -293,14 +209,14 @@ Visa hjälp:
 Exempel anrop:
 
 ```bash
-./gradlew runCli --args="--namespace default start sample-batch-job --timeout-seconds 900"
-./gradlew runCli --args="--namespace default start sample-batch-job --timeout-seconds 900 --parameter runType=FULL --parameter businessDate=2026-04-17"
-./gradlew runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true"
-./gradlew runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true --parameter runType=REPROCESS"
-./gradlew runCli --args="--namespace default restart sample-batch-job --keep-failed-pods=false"
-./gradlew runCli --args="--namespace default start-execution inv-javabatch-template --timeout-seconds 1800 --parameter businessDate=2026-04-24"
-./gradlew runCli --args="--namespace default execution-status exec-name-123"
-./gradlew runCli --args="--namespace default stop-execution exec-name-123 --delete-pods=false"
+./gradlew op-proxy-app:runCli --args="--namespace default start sample-batch-job --timeout-seconds 900"
+./gradlew op-proxy-app:runCli --args="--namespace default start sample-batch-job --timeout-seconds 900 --parameter runType=FULL --parameter businessDate=2026-04-17"
+./gradlew op-proxy-app:runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true"
+./gradlew op-proxy-app:runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true --parameter runType=REPROCESS"
+./gradlew op-proxy-app:runCli --args="--namespace default restart sample-batch-job --keep-failed-pods=false"
+./gradlew op-proxy-app:runCli --args="--namespace default start-execution inv-javabatch-template --timeout-seconds 1800 --parameter businessDate=2026-04-24"
+./gradlew op-proxy-app:runCli --args="--namespace default execution-status exec-name-123"
+./gradlew op-proxy-app:runCli --args="--namespace default stop-execution exec-name-123"
 ```
 
 `--parameter` kan anges flera gånger och ska ha formatet `name=value`.
@@ -311,17 +227,16 @@ Dubbel parameternyckel i samma CLI-anrop avvisas.
 Exempel anrop:
 
 ```bash
-./gradlew runCli --args="--namespace default start-execution sample-batch-job --client-request-id order-4711 --timeout-seconds 900"
-./gradlew runCli --args="--namespace default start-execution sample-batch-job --parameter runType=FULL --parameter businessDate=2026-04-17"
-./gradlew runCli --args="--namespace default execution-status sample-batch-job-20260422101500-ab12cd"
-./gradlew runCli --args="--namespace default execution-status sample-batch-job-20260422101500-ab12cd --watch --interval-seconds 5 --timeout-seconds 900"
-./gradlew runCli --args="--namespace default stop-execution sample-batch-job-20260422101500-ab12cd"
-./gradlew runCli --args="--namespace default stop-execution sample-batch-job-20260422101500-ab12cd --delete-pods=true"
+./gradlew op-proxy-app:runCli --args="--namespace default start-execution sample-batch-job --client-request-id order-4711 --timeout-seconds 900"
+./gradlew op-proxy-app:runCli --args="--namespace default start-execution sample-batch-job --parameter runType=FULL --parameter businessDate=2026-04-17"
+./gradlew op-proxy-app:runCli --args="--namespace default execution-status sample-batch-job-20260422101500-ab12cd"
+./gradlew op-proxy-app:runCli --args="--namespace default execution-status sample-batch-job-20260422101500-ab12cd --watch --interval-seconds 5 --timeout-seconds 900"
+./gradlew op-proxy-app:runCli --args="--namespace default stop-execution sample-batch-job-20260422101500-ab12cd"
 ```
 
 `start-execution` accepterar `--client-request-id`, `--timeout-seconds` och upprepad `--parameter name=value`.
 `execution-status` följer samma watch-beteende som v1-status.
-`stop-execution` gör graceful stop som default och bevarar aktiva och terminala pods. Med `--delete-pods=true` raderas även kvarvarande pods.
+`stop-execution` gör alltid graceful stop och raderar execution-Jobbet.
 
 Exit-koder (CI/CD):
 - `0` = `SUCCEEDED` eller `STOPPED`
@@ -333,6 +248,5 @@ Exit-koder (CI/CD):
 
 ### Pods vid felsökning
 
-Vid `stop` bevaras pods som default.
-Vid `stop --delete-pods=true` rensas aktiva och terminala pods.
 Vid `restart` styr `keepFailedPods` om terminala pods (`Failed`/`Succeeded`) ska behållas (`true`) eller rensas (`false`).
+För v2-executions kan poddar efter `FAILED` behållas för felsökning tills cluster-ttl städar dem (styrt av `ttlSecondsAfterFinished` i Job/template).
