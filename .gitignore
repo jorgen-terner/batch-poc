@@ -12,6 +12,8 @@ build/
 dist/
 .gradle/
 out/
+*.class
+*.ctxt
 
 # Gradle
 .gradle/
