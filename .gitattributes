@@ -1,0 +1,5 @@
+# Normalisera radslut till LF vid incheckning
+* text=auto
+
+# Shell-skript måste alltid ha LF - annars kraschar de i Linux-containers
+*.sh text eol=lf
