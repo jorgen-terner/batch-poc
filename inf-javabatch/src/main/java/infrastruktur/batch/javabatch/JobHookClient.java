@@ -56,10 +56,10 @@ public class JobHookClient {
         @ConfigProperty(name = "job.hook.stop-url") String stopUrl,
         @ConfigProperty(name = "job.hook.exec-id-param-name", defaultValue = "execId") String execIdParamName,
         @ConfigProperty(name = "job.hook.http-timeout-seconds", defaultValue = "30") long httpTimeoutSeconds,
-        @ConfigProperty(name = "job.hook.common-headers", defaultValue = "") String commonHeaders,
-        @ConfigProperty(name = "job.hook.start-headers", defaultValue = "") String startHeaders,
-        @ConfigProperty(name = "job.hook.status-headers", defaultValue = "") String statusHeaders,
-        @ConfigProperty(name = "job.hook.stop-headers", defaultValue = "") String stopHeaders
+        @ConfigProperty(name = "job.hook.common-headers") Optional<String> commonHeaders,
+        @ConfigProperty(name = "job.hook.start-headers") Optional<String> startHeaders,
+        @ConfigProperty(name = "job.hook.status-headers") Optional<String> statusHeaders,
+        @ConfigProperty(name = "job.hook.stop-headers") Optional<String> stopHeaders
     ) {
         if (httpTimeoutSeconds < 1) {
             throw new IllegalArgumentException("job.hook.http-timeout-seconds must be >= 1");
@@ -76,10 +76,10 @@ public class JobHookClient {
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(this.httpTimeout)
             .build();
-        this.commonHeaders = parseHeaders(commonHeaders, "job.hook.common-headers");
-        this.startHeaders = parseHeaders(startHeaders, "job.hook.start-headers");
-        this.statusHeaders = parseHeaders(statusHeaders, "job.hook.status-headers");
-        this.stopHeaders = parseHeaders(stopHeaders, "job.hook.stop-headers");
+        this.commonHeaders = parseHeaders(commonHeaders.orElse(""), "job.hook.common-headers");
+        this.startHeaders = parseHeaders(startHeaders.orElse(""), "job.hook.start-headers");
+        this.statusHeaders = parseHeaders(statusHeaders.orElse(""), "job.hook.status-headers");
+        this.stopHeaders = parseHeaders(stopHeaders.orElse(""), "job.hook.stop-headers");
     }
 
     public String invokeStartAndGetExecutionId() {
