@@ -23,6 +23,16 @@ data:
   # Per-hook timeout in seconds.
   HTTP_TIMEOUT_SECONDS: "30"
 
+  # Optional headers for all hook calls (START/STATUS/STOP).
+  # Format: Header=Value;Another-Header=Value2
+  COMMON_HEADERS: ""
+
+  # Optional endpoint-specific headers.
+  # Format: Header=Value;Another-Header=Value2
+  START_HEADERS: ""
+  STATUS_HEADERS: ""
+  STOP_HEADERS: ""
+
   # Status polling interval in seconds.
   STATUS_POLL_INTERVAL_SECONDS: "5"
 

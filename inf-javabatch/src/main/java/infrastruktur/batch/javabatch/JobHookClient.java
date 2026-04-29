@@ -14,7 +14,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -31,6 +33,10 @@ public class JobHookClient {
     private final String execIdParamName;
     private final Duration httpTimeout;
     private final HttpClient httpClient;
+    private final Map<String, String> commonHeaders;
+    private final Map<String, String> startHeaders;
+    private final Map<String, String> statusHeaders;
+    private final Map<String, String> stopHeaders;
 
     private static final Set<String> BATCH_STATUS_VALUES = Set.of(
         "STARTING",
@@ -49,7 +55,11 @@ public class JobHookClient {
         @ConfigProperty(name = "job.hook.status-url") String statusUrl,
         @ConfigProperty(name = "job.hook.stop-url") String stopUrl,
         @ConfigProperty(name = "job.hook.exec-id-param-name", defaultValue = "execId") String execIdParamName,
-        @ConfigProperty(name = "job.hook.http-timeout-seconds", defaultValue = "30") long httpTimeoutSeconds
+        @ConfigProperty(name = "job.hook.http-timeout-seconds", defaultValue = "30") long httpTimeoutSeconds,
+        @ConfigProperty(name = "job.hook.common-headers", defaultValue = "") String commonHeaders,
+        @ConfigProperty(name = "job.hook.start-headers", defaultValue = "") String startHeaders,
+        @ConfigProperty(name = "job.hook.status-headers", defaultValue = "") String statusHeaders,
+        @ConfigProperty(name = "job.hook.stop-headers", defaultValue = "") String stopHeaders
     ) {
         if (httpTimeoutSeconds < 1) {
             throw new IllegalArgumentException("job.hook.http-timeout-seconds must be >= 1");
@@ -66,13 +76,17 @@ public class JobHookClient {
         this.httpClient = HttpClient.newBuilder()
             .connectTimeout(this.httpTimeout)
             .build();
+        this.commonHeaders = parseHeaders(commonHeaders, "job.hook.common-headers");
+        this.startHeaders = parseHeaders(startHeaders, "job.hook.start-headers");
+        this.statusHeaders = parseHeaders(statusHeaders, "job.hook.status-headers");
+        this.stopHeaders = parseHeaders(stopHeaders, "job.hook.stop-headers");
     }
 
     public String invokeStartAndGetExecutionId() {
         if (startUrl == null) {
             throw new IllegalStateException("Missing required config: job.hook.start-url");
         }
-        HttpResponse<String> response = invokeRequiredUrl("START", startUrl);
+        HttpResponse<String> response = invokeRequiredUrl("START", startUrl, mergeHeaders(startHeaders));
         String executionId = response.body() == null ? "" : response.body().trim();
         if (executionId.isBlank()) {
             throw new IllegalStateException("START hook returned empty executionId");
@@ -90,7 +104,7 @@ public class JobHookClient {
         }
 
         String urlWithExecId = appendQueryParam(statusUrl, execIdParamName, executionId);
-        HttpResponse<String> response = invokeRequiredUrl("STATUS", urlWithExecId);
+        HttpResponse<String> response = invokeRequiredUrl("STATUS", urlWithExecId, mergeHeaders(statusHeaders));
         String body = response.body() == null ? "" : response.body().trim();
         if (body.isBlank()) {
             throw new IllegalStateException("STATUS hook returned empty response");
@@ -110,14 +124,16 @@ public class JobHookClient {
         }
 
         String urlWithExecId = appendQueryParam(stopUrl, execIdParamName, executionId);
-        invokeRequiredUrl("STOP", urlWithExecId);
+        invokeRequiredUrl("STOP", urlWithExecId, mergeHeaders(stopHeaders));
     }
 
-    private HttpResponse<String> invokeRequiredUrl(String hookName, String url) {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+    private HttpResponse<String> invokeRequiredUrl(String hookName, String url, Map<String, String> headers) {
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(URI.create(url))
             .GET()
-            .timeout(httpTimeout)
-            .build();
+            .timeout(httpTimeout);
+        headers.forEach(requestBuilder::header);
+
+        HttpRequest request = requestBuilder.build();
 
         String requestUrl = request.uri().toString();
 
@@ -191,5 +207,51 @@ public class JobHookClient {
             return null;
         }
         return url.trim();
+    }
+
+    private Map<String, String> mergeHeaders(Map<String, String> specificHeaders) {
+        if (commonHeaders.isEmpty() && specificHeaders.isEmpty()) {
+            return Map.of();
+        }
+        LinkedHashMap<String, String> merged = new LinkedHashMap<>(commonHeaders);
+        merged.putAll(specificHeaders);
+        return Map.copyOf(merged);
+    }
+
+    private Map<String, String> parseHeaders(String rawHeaders, String propertyName) {
+        if (rawHeaders == null || rawHeaders.isBlank()) {
+            return Map.of();
+        }
+
+        LinkedHashMap<String, String> headers = new LinkedHashMap<>();
+        String[] entries = rawHeaders.split("[;\\r\\n]+");
+        for (String entry : entries) {
+            String trimmedEntry = entry.trim();
+            if (trimmedEntry.isEmpty()) {
+                continue;
+            }
+
+            int separatorIndex = trimmedEntry.indexOf('=');
+            if (separatorIndex < 0) {
+                separatorIndex = trimmedEntry.indexOf(':');
+            }
+            if (separatorIndex <= 0 || separatorIndex == trimmedEntry.length() - 1) {
+                throw new IllegalArgumentException(
+                    propertyName + " contains invalid header entry: '" + trimmedEntry + "'. Expected format 'Header=Value'"
+                );
+            }
+
+            String name = trimmedEntry.substring(0, separatorIndex).trim();
+            String value = trimmedEntry.substring(separatorIndex + 1).trim();
+            if (name.isEmpty()) {
+                throw new IllegalArgumentException(propertyName + " contains a blank header name");
+            }
+            if (value.isEmpty()) {
+                throw new IllegalArgumentException(propertyName + " contains a blank value for header '" + name + "'");
+            }
+            headers.put(name, value);
+        }
+
+        return headers.isEmpty() ? Map.of() : Map.copyOf(headers);
     }
 }

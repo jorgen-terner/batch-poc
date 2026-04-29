@@ -19,6 +19,10 @@ Quarkus-baserad Job-worker som körs i en Kubernetes Job-container och anropar e
 - `STOP` - valfri URL som anropas när podden termineras.
 - `EXEC_ID_PARAM_NAME` - request-parameternamn för execution id, default `execId`.
 - `HTTP_TIMEOUT_SECONDS` - timeout per hook-anrop, default `30`.
+- `COMMON_HEADERS` - valfria headrar för alla hook-anrop (`START`, `STATUS`, `STOP`). Format: `Header=Value;Another-Header=Value2`.
+- `START_HEADERS` - valfria headrar enbart för `START` (samma format som ovan).
+- `STATUS_HEADERS` - valfria headrar enbart för `STATUS` (samma format som ovan).
+- `STOP_HEADERS` - valfria headrar enbart för `STOP` (samma format som ovan).
 - `STATUS_POLL_INTERVAL_SECONDS` - pollingintervall för `STATUS`, default `5`.
 - `MAX_POLL_SECONDS` - maximal total pollingtid i sekunder, default `3600`.
 - `STOP_WAIT_SECONDS` - väntetid efter `STOP`, default `15`.

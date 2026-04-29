@@ -21,6 +21,18 @@ parameters:
   - name: TTL_SECONDS
     description: "Job TTL after completion"
     value: "300"
+  - name: COMMON_HEADERS
+    description: "Optional headers for all hook calls. Format: Header=Value;Another-Header=Value2"
+    value: ""
+  - name: START_HEADERS
+    description: "Optional headers for START hook. Format: Header=Value;Another-Header=Value2"
+    value: ""
+  - name: STATUS_HEADERS
+    description: "Optional headers for STATUS hook. Format: Header=Value;Another-Header=Value2"
+    value: ""
+  - name: STOP_HEADERS
+    description: "Optional headers for STOP hook. Format: Header=Value;Another-Header=Value2"
+    value: ""
 objects:
   - apiVersion: batch/v1
     kind: Job
@@ -44,11 +56,19 @@ objects:
           containers:
             - name: inv-javabatch
               image: ${IMAGE}
-              imagePullPolicy: IfNotPresent
+              imagePullPolicy: Always
               envFrom:
                 - configMapRef:
                     name: ${CONFIGMAP_NAME}
               env:
+                - name: COMMON_HEADERS
+                  value: ${COMMON_HEADERS}
+                - name: START_HEADERS
+                  value: ${START_HEADERS}
+                - name: STATUS_HEADERS
+                  value: ${STATUS_HEADERS}
+                - name: STOP_HEADERS
+                  value: ${STOP_HEADERS}
                 - name: JOB_NAMESPACE
                   valueFrom:
                     fieldRef:

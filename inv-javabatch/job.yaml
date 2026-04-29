@@ -18,7 +18,7 @@ spec:
       containers:
         - name: inv-javabatch
           image: image-registry.openshift-image-registry.svc:5000/dev252/inv-javabatch:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           envFrom:
             - configMapRef:
                 name: inv-javabatch-config
