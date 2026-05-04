@@ -238,6 +238,32 @@ Exempel anrop:
 `execution-status` följer samma watch-beteende som v1-status.
 `stop-execution` gör alltid graceful stop och raderar execution-Jobbet.
 
+#### Från terminal i en pod utan Gradle
+
+I en vanlig runtime-pod finns normalt inte Gradle-wrappern. Kör då CLI via wrapper-skriptet i imagen.
+
+`java -jar /deployments/quarkus-run.jar` är inte samma sak som CLI:t. Det kommandot startar Quarkus-applikationen och exponerar HTTP-API:t på port 8080.
+
+För enklare CLI-körning finns wrapper-skriptet `/deployments/bin/run-cli.sh` i imagen:
+
+```bash
+sh /deployments/bin/run-cli.sh --help
+sh /deployments/bin/run-cli.sh --namespace default start-execution inv-javabatch-template --timeout-seconds 900
+```
+
+Skriptet hittar rätt fast-jar-layout automatiskt och använder projektets Java 21 lokalt när det behövs.
+
+Vanliga CLI-exempel i pod:
+
+```bash
+sh /deployments/bin/run-cli.sh --namespace default start-execution inv-javabatch-template --timeout-seconds 900
+sh /deployments/bin/run-cli.sh --namespace default execution-status <execution-name>
+sh /deployments/bin/run-cli.sh --namespace default execution-status <execution-name> --watch --interval-seconds 5 --timeout-seconds 900
+sh /deployments/bin/run-cli.sh --namespace default stop-execution <execution-name>
+```
+
+Om du behöver HTTP-anrop direkt, se API-sektionerna ovan (v1/v2).
+
 Exit-koder (CI/CD):
 - `0` = `SUCCEEDED` eller `STOPPED`
 - `10` = `RUNNING` eller `PENDING`

@@ -12,6 +12,7 @@ COPY --chown=1000 build/quarkus-app/lib/ /deployments/lib/
 COPY --chown=1000 build/quarkus-app/*.jar /deployments/
 COPY --chown=1000 build/quarkus-app/app/ /deployments/app/
 COPY --chown=1000 build/quarkus-app/quarkus/ /deployments/quarkus/
+COPY --chown=1000 bin/run-cli.sh /deployments/bin/run-cli.sh
 
 EXPOSE 8080
 USER 1000

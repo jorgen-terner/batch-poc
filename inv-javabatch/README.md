@@ -74,6 +74,22 @@ curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-template/s
   }'
 ```
 
+Om du sitter i en terminal i en pod-instans och inte har Gradle tillgängligt, kör CLI via wrapper-skriptet i op-proxy-app-imagen:
+
+`java -jar /deployments/quarkus-run.jar` startar bara op-proxy-app som HTTP-server.
+
+Enklast i pod är wrapper-skriptet som nu finns i op-proxy-app-imagen:
+
+```bash
+sh /deployments/bin/run-cli.sh --help
+sh /deployments/bin/run-cli.sh --namespace dev252 start-execution inv-javabatch-template --timeout-seconds 900
+sh /deployments/bin/run-cli.sh --namespace dev252 execution-status <execution-name>
+sh /deployments/bin/run-cli.sh --namespace dev252 execution-status <execution-name> --watch --interval-seconds 5 --timeout-seconds 900
+sh /deployments/bin/run-cli.sh --namespace dev252 stop-execution <execution-name>
+```
+
+För HTTP-anrop med curl, använd API-exemplen ovan i dokumentet.
+
 Vid varje `start-execution` kommer op-proxy-app att:
 1. Läsa OpenShift Template `inv-javabatch-template`
 2. Köra `oc process inv-javabatch-template` för att generera Job-manifest
