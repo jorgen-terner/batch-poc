@@ -1,18 +1,18 @@
-# RFC: Template/Execution API for op-proxy-app (v2)
+# RFC: Template/Execution API for op-proxy-app 
 
-Detta dokument beskriver v2-kontraktet för template-baserade executions.
+Detta dokument beskriver kontraktet för template-baserade executions.
 
 Malen ar:
 
 1. Konsekvent namngivning: execution/start/stop.
 2. Enkel klientmodell med tydliga state-overgangar.
-3. Delad intern logik med v1 dar det ar rimligt.
+3. En enhetlig intern logik utan versionssplit.
 
-## 1. API-kontrakt (v2)
+## 1. API-kontrakt 
 
 ### 1.1 Starta ny execution fran template
 
-`POST /api/v2/templates/{templateName}/start`
+`POST /api/templates/{templateName}/start`
 
 Request body (`StartExecutionRequestVO`):
 
@@ -43,7 +43,7 @@ Response (`ExecutionActionResponseVO`):
 
 ### 1.2 Hamta execution-status
 
-`GET /api/v2/executions/{executionName}`
+`GET /api/executions/{executionName}`
 
 Response (`ExecutionStatusResponseVO`):
 
@@ -63,7 +63,7 @@ Response (`ExecutionStatusResponseVO`):
 
 ### 1.3 Stoppa execution
 
-`POST /api/v2/executions/{executionName}/stop`
+`POST /api/executions/{executionName}/stop`
 
 Ingen request body.
 
@@ -101,12 +101,12 @@ Modelklasser under `infrastruktur.batch.model`:
 
 ## 4. Resurser och tjänster
 
-1. `TemplateExecutionResource` (v2)
+1. `TemplateExecutionResource` 
 2. `TemplateExecutionService`
 
-Legacy v1 (`JobResource` och `JobControlService`) lever vidare parallellt tills klienter är migrerade.
+Tidigare v1-resurser är borttagna; endast template/execution-kontraktet gäller.
 
-## 5. Exit-koder och CLI (v2)
+## 5. Exit-koder och CLI 
 
 1. `0` = `SUCCEEDED` eller `STOPPED`
 2. `10` = `RUNNING` eller `PENDING`
@@ -114,18 +114,17 @@ Legacy v1 (`JobResource` och `JobControlService`) lever vidare parallellt tills 
 4. `4` = `UNKNOWN`
 5. `124` = timeout i watch-läge
 
-## 6. Migrering
+## 6. Övergång (klart)
 
-### Fas 1
+### Genomfört
 
-1. Introducera v2-endpoints enligt sektion 1.
-2. Behåll v1-endpoints oförändrade.
+1. API:t är versionslöst: `/api/templates/.../start` och `/api/executions/...`.
+2. Tidigare v1-kontrakt är avvecklat.
 
-### Fas 2
 
-1. Migrera klienter till `/api/v2/templates/.../start` och `/api/v2/executions/...`.
 
-### Fas 3
 
-1. Markera v1 som deprecated.
-2. Avveckla v1 när inga klienter återstår.
+
+
+
+

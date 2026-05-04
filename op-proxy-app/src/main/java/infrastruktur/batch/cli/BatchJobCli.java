@@ -1,14 +1,9 @@
 package infrastruktur.batch.cli;
 
-import infrastruktur.batch.model.ActionResponse;
 import infrastruktur.batch.model.ExecutionActionResponseVO;
 import infrastruktur.batch.model.ExecutionStatusResponseVO;
 import infrastruktur.batch.model.StartExecutionRequestVO;
 import infrastruktur.batch.model.JobParameterVO;
-import infrastruktur.batch.model.RestartJobRequestVO;
-import infrastruktur.batch.model.StartJobRequestVO;
-import infrastruktur.batch.model.JobStatusResponse;
-import infrastruktur.batch.service.JobControlService;
 import infrastruktur.batch.service.JobPhaseResolver;
 import infrastruktur.batch.service.KubernetesJobGateway;
 import infrastruktur.batch.service.TemplateExecutionService;
@@ -27,23 +22,15 @@ import picocli.CommandLine.Parameters;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.Set;
 import java.util.concurrent.Callable;
 
 @Command(
     name = "batch-job",
     mixinStandardHelpOptions = true,
-    description = "CLI for controlling pre-created Kubernetes batch Jobs",
+    description = "CLI for controlling template-based executions",
     subcommands = {
-        BatchJobCli.StartCommand.class,
-        BatchJobCli.StopCommand.class,
-        BatchJobCli.RestartCommand.class,
-        BatchJobCli.StatusCommand.class,
         BatchJobCli.StartExecutionCommand.class,
         BatchJobCli.ExecutionStatusCommand.class,
         BatchJobCli.StopExecutionCommand.class
@@ -63,7 +50,6 @@ public final class BatchJobCli implements Runnable {
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule());
     private CommandLine commandLine;
     private KubernetesClient kubernetesClient;
-    private JobControlService jobControlService;
     private TemplateExecutionService templateExecutionService;
 
     public static void main(String[] args) {
@@ -80,14 +66,6 @@ public final class BatchJobCli implements Runnable {
     @Override
     public void run() {
         cli().usage(cli().getOut());
-    }
-
-    private JobControlService service() {
-        if (jobControlService == null) {
-            kubernetesClient = new KubernetesClientBuilder().build();
-            jobControlService = new JobControlService(kubernetesClient);
-        }
-        return jobControlService;
     }
 
     private TemplateExecutionService templateService() {
@@ -142,8 +120,7 @@ public final class BatchJobCli implements Runnable {
             return null;
         }
 
-        Map<String, String> deduplicated = new LinkedHashMap<>();
-        Set<String> duplicateGuard = new HashSet<>();
+        List<JobParameterVO> result = new ArrayList<>();
         for (String entry : entries) {
             if (entry == null || entry.isBlank()) {
                 throw new IllegalArgumentException("--parameter expects name=value");
@@ -159,151 +136,13 @@ public final class BatchJobCli implements Runnable {
             if (name.isBlank()) {
                 throw new IllegalArgumentException("--parameter name must not be blank");
             }
-            if (!duplicateGuard.add(name)) {
-                throw new IllegalArgumentException("Duplicate parameter name: " + name);
-            }
 
-            deduplicated.put(name, value);
-        }
-
-        List<JobParameterVO> result = new ArrayList<>();
-        for (Map.Entry<String, String> entry : deduplicated.entrySet()) {
-            result.add(new JobParameterVO(entry.getKey(), entry.getValue()));
+            result.add(new JobParameterVO(name, value));
         }
         return result;
     }
 
-    @Command(name = "start", description = "Start a suspended Job")
-    static final class StartCommand implements Callable<Integer> {
-        @CommandLine.ParentCommand
-        private BatchJobCli parent;
-
-        @Parameters(index = "0", description = "Job name")
-        private String jobName;
-
-        @Option(names = {"--timeout-seconds"}, description = "Optional max runtime (activeDeadlineSeconds)")
-        private Long timeoutSeconds;
-
-        @Option(names = {"-p", "--parameter"}, description = "Job parameter as name=value (repeat option for multiple values)")
-        private List<String> parameters;
-
-        @Override
-        public Integer call() {
-            return parent.executeWithNotFoundHandling(() -> {
-                ActionResponse response = parent.service().start(
-                    parent.namespace,
-                    jobName,
-                    new StartJobRequestVO(timeoutSeconds, parent.parseParameters(parameters))
-                );
-                parent.printJson(response);
-                return parent.exitCodeFromState(response.state());
-            });
-        }
-    }
-
-    @Command(name = "stop", description = "Stop a running Job")
-    static final class StopCommand implements Callable<Integer> {
-        @CommandLine.ParentCommand
-        private BatchJobCli parent;
-
-        @Parameters(index = "0", description = "Job name")
-        private String jobName;
-
-        @Override
-        public Integer call() {
-            return parent.executeWithNotFoundHandling(() -> {
-                ActionResponse response = parent.service().stop(parent.namespace, jobName);
-                parent.printJson(response);
-                return parent.exitCodeFromState(response.state());
-            });
-        }
-    }
-
-    @Command(name = "restart", description = "Restart a Job by recreate")
-    static final class RestartCommand implements Callable<Integer> {
-        @CommandLine.ParentCommand
-        private BatchJobCli parent;
-
-        @Parameters(index = "0", description = "Job name")
-        private String jobName;
-
-        @Option(names = {"--timeout-seconds"}, description = "Optional max runtime (activeDeadlineSeconds)")
-        private Long timeoutSeconds;
-
-        @Option(names = {"--keep-failed-pods"}, defaultValue = "true", description = "Keep failed/succeeded pods for troubleshooting")
-        private boolean keepFailedPods;
-
-        @Option(names = {"-p", "--parameter"}, description = "Job parameter as name=value (repeat option for multiple values)")
-        private List<String> parameters;
-
-        @Override
-        public Integer call() {
-            return parent.executeWithNotFoundHandling(() -> {
-                ActionResponse response = parent.service().restart(
-                    parent.namespace,
-                    jobName,
-                    new RestartJobRequestVO(timeoutSeconds, keepFailedPods, parent.parseParameters(parameters))
-                );
-                parent.printJson(response);
-                return parent.exitCodeFromState(response.state());
-            });
-        }
-    }
-
-    @Command(name = "status", description = "Get Job status (optionally watch until terminal state)")
-    static final class StatusCommand implements Callable<Integer> {
-        @CommandLine.ParentCommand
-        private BatchJobCli parent;
-
-        @Parameters(index = "0", description = "Job name")
-        private String jobName;
-
-        @Option(names = {"-w", "--watch"}, description = "Poll status until SUCCEEDED or FAILED")
-        private boolean watch;
-
-        @Option(names = {"--interval-seconds"}, defaultValue = "5", description = "Polling interval when --watch is enabled")
-        private long intervalSeconds;
-
-        @Option(names = {"--timeout-seconds"}, description = "Optional timeout for watch mode")
-        private Long timeoutSeconds;
-
-        @Override
-        public Integer call() {
-            return parent.executeWithNotFoundHandling(() -> {
-                if (!watch) {
-                    JobStatusResponse status = parent.service().status(parent.namespace, jobName);
-                    parent.printJson(status);
-                    return parent.exitCodeFromPhase(status.phase());
-                }
-
-                if (intervalSeconds < 1) {
-                    throw new IllegalArgumentException("--interval-seconds must be >= 1");
-                }
-
-                Instant started = Instant.now();
-                while (true) {
-                    JobStatusResponse status = parent.service().status(parent.namespace, jobName);
-                    parent.printJson(status);
-
-                    String phase = status.phase();
-                    if ("SUCCEEDED".equalsIgnoreCase(phase) || "FAILED".equalsIgnoreCase(phase)) {
-                        return parent.exitCodeFromPhase(phase);
-                    }
-
-                    if (timeoutSeconds != null) {
-                        long elapsed = Duration.between(started, Instant.now()).toSeconds();
-                        if (elapsed >= timeoutSeconds) {
-                            return 124;
-                        }
-                    }
-
-                    parent.sleep(intervalSeconds * 1000);
-                }
-            });
-        }
-    }
-
-    @Command(name = "start-execution", description = "Start an execution from a template (v2)")
+    @Command(name = "start-execution", description = "Start an execution from a template")
     static final class StartExecutionCommand implements Callable<Integer> {
         @CommandLine.ParentCommand
         private BatchJobCli parent;
@@ -317,7 +156,7 @@ public final class BatchJobCli implements Runnable {
         @Option(names = {"--timeout-seconds"}, description = "Optional max runtime (activeDeadlineSeconds)")
         private Long timeoutSeconds;
 
-        @Option(names = {"-p", "--parameter"}, description = "Execution parameter as name=value (repeat option for multiple values)")
+        @Option(names = {"-p", "--parameter"}, description = "Template parameter as name=value (repeat option for multiple values)")
         private List<String> parameters;
 
         @Override
@@ -334,7 +173,7 @@ public final class BatchJobCli implements Runnable {
         }
     }
 
-    @Command(name = "execution-status", description = "Get execution status (v2, optionally watch until terminal state)")
+    @Command(name = "execution-status", description = "Get execution status (optionally watch until terminal state)")
     static final class ExecutionStatusCommand implements Callable<Integer> {
         @CommandLine.ParentCommand
         private BatchJobCli parent;
@@ -387,7 +226,7 @@ public final class BatchJobCli implements Runnable {
         }
     }
 
-    @Command(name = "stop-execution", description = "Stop an execution (v2)")
+    @Command(name = "stop-execution", description = "Stop an execution")
     static final class StopExecutionCommand implements Callable<Integer> {
         @CommandLine.ParentCommand
         private BatchJobCli parent;
@@ -458,3 +297,6 @@ public final class BatchJobCli implements Runnable {
         }
     }
 }
+
+
+

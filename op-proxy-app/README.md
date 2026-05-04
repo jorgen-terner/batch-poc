@@ -2,9 +2,7 @@
 
 Java 21-applikation för att styra batch-körningar i Kubernetes/OpenShift via REST API.
 
-Appen stödjer två modeller:
-- Legacy v1: styrning av förskapade suspended Jobs
-- Nuvarande v2: template/run-flöde där nya Jobs skapas från ett template-Job
+Appen stödjer template/run-flöde, där nya Jobs skapas från ett template-Job.
 
 ## Teknikval
 
@@ -14,18 +12,7 @@ Appen stödjer två modeller:
 
 ## Koncept
 
-op-proxy-app innehåller både ett äldre suspended-job-flöde och ett nyare template/run-flöde.
-
-I legacy-v1 utgår appen från att Job redan finns i Kubernetes med:
-
-```yaml
-spec:
-  suspend: true
-```
-
-API:et ändrar sedan Job-state genom att patcha `spec.suspend` och hantera pods.
-
-I v2 används i stället ett befintligt template-Job som källa. Vid varje ny körning kopierar appen template-jobbet, genererar ett nytt `runName`, applicerar parametrar och skapar ett nytt Job i klustret.
+Här används ett befintligt template-Job som källa. Vid varje ny körning kopierar appen template-jobbet, genererar ett nytt `runName`, applicerar parametrar och skapar ett nytt Job i klustret.
 
 ## Starta lokalt (Quarkus)
 
@@ -64,13 +51,13 @@ oc apply -f rbac-op-proxy-app.yaml
 
 ### RBAC-rättigheter som behövs
 
-op-proxy-app behöver namespaced RBAC för att kunna styra både legacy suspended Jobs och v2 template/run-körningar:
+op-proxy-app behöver namespaced RBAC för att kunna styra template/run-körningar:
 
 - `batch/jobs`: `get`, `list`, `watch`, `create`, `update`, `patch`, `delete`
 - `core/pods`: `get`, `list`, `watch`, `delete`
 - `core/pods/log`: `get`, `list`, `watch`
-- `template.openshift.io/templates`: `get`, `list`, `watch` (v2 template-run)
-- `template.openshift.io/processedtemplates`: `create` (v2 server-side template processing)
+- `template.openshift.io/templates`: `get`, `list`, `watch` (template-run)
+- `template.openshift.io/processedtemplates`: `create` (server-side template processing)
 
 
 RBAC är utbrutet i separat fil: `rbac-op-proxy-app.yaml`.
@@ -93,29 +80,49 @@ curl https://$(oc -n batch-jobs get route op-proxy-app -o jsonpath='{.spec.host}
 
 ## API (HTTP och CLI)
 
-CLI:t använder samma JobControlService som HTTP-API:t, men utan HTTP-lager.
+CLI:t använder samma service som HTTP-API:t, men utan HTTP-lager.
 
-## Template-baserat API (v2)
+## Loggnivå via miljövariabel
 
-Utöver legacy-API:t för suspended Jobs finns nu ett separat v2-API för template-baserade körningar i OpenShift/Kubernetes.
+Du kan styra loggnivån med miljövariabeln `LOG_LEVEL`.
 
-Flödet utgår från en OpenShift Template-resurs i klustret. När klienten startar en execution processar op-proxy-app templaten, använder `metadata.name` från processad template som `executionName`, applicerar eventuella parametrar som env-variabler och skapar ett nytt Job.
+Tillåtna vanliga värden är t.ex. `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`.
 
-Notis: implementationen använder båda API-varianterna. Jobs/pods hanteras via Kubernetes API, medan template-processing i v2 görs via OpenShift Template API (server-side processing med lokal fallback).
+Exempel i OpenShift (deployment):
+
+```bash
+oc -n batch-jobs set env deployment/op-proxy-app LOG_LEVEL=DEBUG
+```
+
+Exempel för lokal start:
+
+```bash
+LOG_LEVEL=DEBUG ./gradlew quarkusDev
+```
+
+Notis: bakåtkompatibilitet finns kvar för `OP_PROXY_APP_LOG_LEVEL` och `QUARKUS_LOG_LEVEL`, men `LOG_LEVEL` är den rekommenderade variabeln framöver.
+
+## Template-baserat API
+
+API:t används för template-baserade körningar i OpenShift/Kubernetes.
+
+Flödet utgår från en OpenShift Template-resurs i klustret. När klienten startar en execution processar op-proxy-app templaten, använder `metadata.name` från processad template som `executionName`, applicerar eventuella parametrar som template-parametrar och skapar ett nytt Job.
+
+Notis: implementationen använder båda API-varianterna. Jobs/pods hanteras via Kubernetes API, medan template-processing görs via OpenShift Template API (server-side processing med lokal fallback).
 
 Se [TEMPLATE-EXECUTION-API-RFC.md](TEMPLATE-EXECUTION-API-RFC.md) för bakgrund och migreringsidéer. README:n nedan beskriver den aktuella implementationen.
 
-### HTTP-endpoints (v2)
+### HTTP-endpoints
 
-- `POST /api/v2/templates/{templateName}/start`
-- `GET /api/v2/executions/{executionName}`
-- `POST /api/v2/executions/{executionName}/stop`
+- `POST /api/templates/{templateName}/start`
+- `GET /api/executions/{executionName}`
+- `POST /api/executions/{executionName}/stop`
 
-### curl-exempel (v2)
+### curl-exempel
 
 ```bash
 # 1) Start execution
-curl -sS -X POST "http://localhost:8080/api/v2/templates/$TEMPLATE_NAME/start" -H "Content-Type: application/json"
+curl -sS -X POST "http://localhost:8080/api/templates/$TEMPLATE_NAME/start" -H "Content-Type: application/json"
   --data-raw '{
     "clientRequestId": "manual-2026-04-23-001",
     "timeoutSeconds": 1800,
@@ -129,10 +136,10 @@ curl -sS -X POST "http://localhost:8080/api/v2/templates/$TEMPLATE_NAME/start" -
 Läs ut executionName från start-svar
 
 # 2) Execution status
-curl -sS -X GET "http://localhost:8080/api/v2/executions/$EXECUTION_NAME"
+curl -sS -X GET "http://localhost:8080/api/executions/$EXECUTION_NAME"
 
 # 3) Stop execution
-curl -sS -X POST "http://localhost:8080/api/v2/executions/$EXECUTION_NAME/stop"
+curl -sS -X POST "http://localhost:8080/api/executions/$EXECUTION_NAME/stop"
 ```
 
 ### Kontrakt
@@ -140,7 +147,7 @@ curl -sS -X POST "http://localhost:8080/api/v2/executions/$EXECUTION_NAME/stop"
 Start request:
 - `clientRequestId`: valfri korrelationsnyckel från klienten
 - `timeoutSeconds`: valfri timeout som sätts som `activeDeadlineSeconds`
-- `parameters`: valfri lista av `name/value` som skrivs till första containerns env-variabler
+- `parameters`: valfri lista av `name/value` som skickas som OpenShift template-parametrar vid processering av templaten
 
 Start/stop response (`ExecutionActionResponseVO`) innehåller `namespace`, `templateName`, `executionName`, `clientRequestId`, `action`, `state`, `message` och `createdAt`.
 
@@ -148,57 +155,35 @@ Status response (`ExecutionStatusResponseVO`) innehåller `namespace`, `template
 
 `executionName` skickas inte in av klienten. Det sätts av processad template (`metadata.name`) och returneras i start-responsen för status- och stop-anrop.
 
-Validering av `parameters` i v2:
+Validering av `parameters`:
 - `name` måste vara satt och får inte vara blankt
 - `value` måste vara satt (`""` tom sträng är giltigt)
 - Dubbel `name` i samma request avvisas
+
+Notis: `parameters` används enbart som template-parametrar vid processering av OpenShift Template. De injiceras inte som separata env-overrides efter att templaten processats.
 
 Stop request:
 - Ingen request body
 - Stop utför alltid graceful stop (suspend), väntar en kort stund på att aktiva pods ska stanna och raderar sedan execution-Jobbet
 
-### Flöde i v2
+### Flöde
 
-1. Klienten anropar `POST /api/v2/templates/{templateName}/start`.
+1. Klienten anropar `POST /api/templates/{templateName}/start`.
 2. op-proxy-app processar templaten i samma namespace.
 3. `executionName` läses från `metadata.name` i processad template.
 4. Ett nytt Job skapas från processad template med labels för template och execution.
-5. Klienten följer körningen via `GET /api/v2/executions/{executionName}`.
-6. Vid behov stoppar körningen via `POST /api/v2/executions/{executionName}/stop`.
+5. Klienten följer körningen via `GET /api/executions/{executionName}`.
+6. Vid behov stoppar körningen via `POST /api/executions/{executionName}/stop`.
 
-### Metrik för v2
+### Metrik
 
 op-proxy-app exponerar inte längre endpoints för att läsa metrics eller ta emot explicita report-anrop.
 I stället skickar service-lagret generella Job/Execution-händelser till en intern `JobMetricsReporter`.
 Just nu loggas dessa händelser via `slf4j` innan en extern produkt kopplas in.
 
-## Legacy API (v1 suspended Jobs)
-
-### HTTP-endpoints
-
-- `POST /api/v1/jobs/{jobName}/start` (asynkront)
-- `POST /api/v1/jobs/{jobName}/stop`
-- `POST /api/v1/jobs/{jobName}/restart`
-- `GET /api/v1/jobs/{jobName}/status`
-
-REST-API:t är namespace-bundet per appinstans. Namespace läses från `BATCH_JOB_NAMESPACE` och sätts automatiskt från poddens eget namespace i OpenShift-deploymenten.
-
-### Kort om v1
-
-`start` unsuspendar Jobbet och returnerar direkt. Klienten följer sedan körningen via `status` tills `SUCCEEDED` eller `FAILED`.
-
-Parametrar för `start` och `restart`:
-- Gemensamma body-fält: `timeoutSeconds` (valfri) och `parameters` (valfri lista med `{ "name": "...", "value": "..." }`).
-- Endast för `restart`: `keepFailedPods` i body, default `true`. Styr om terminala pods (`Failed`/`Succeeded`) behålls för felsökning.
-
-Validering av `parameters`:
-- `name` måste vara satt och får inte vara blankt.
-- `value` måste vara satt (`""` tom sträng är giltigt).
-- Dubbel `name` i samma request avvisas.
-
 ### CLI-API
 
-CLI:t innehåller nu kommandon för både v1 (legacy suspended Jobs) och v2 (template/execution).
+CLI:t innehåller kommandon för template/execution.
 
 Visa hjälp:
 
@@ -209,11 +194,6 @@ Visa hjälp:
 Exempel anrop:
 
 ```bash
-./gradlew op-proxy-app:runCli --args="--namespace default start sample-batch-job --timeout-seconds 900"
-./gradlew op-proxy-app:runCli --args="--namespace default start sample-batch-job --timeout-seconds 900 --parameter runType=FULL --parameter businessDate=2026-04-17"
-./gradlew op-proxy-app:runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true"
-./gradlew op-proxy-app:runCli --args="--namespace default restart sample-batch-job --timeout-seconds 900 --keep-failed-pods=true --parameter runType=REPROCESS"
-./gradlew op-proxy-app:runCli --args="--namespace default restart sample-batch-job --keep-failed-pods=false"
 ./gradlew op-proxy-app:runCli --args="--namespace default start-execution inv-javabatch-template --timeout-seconds 1800 --parameter businessDate=2026-04-24"
 ./gradlew op-proxy-app:runCli --args="--namespace default execution-status exec-name-123"
 ./gradlew op-proxy-app:runCli --args="--namespace default stop-execution exec-name-123"
@@ -222,7 +202,7 @@ Exempel anrop:
 `--parameter` kan anges flera gånger och ska ha formatet `name=value`.
 Dubbel parameternyckel i samma CLI-anrop avvisas.
 
-#### v2 (template/execution)
+#### Template/execution
 
 Exempel anrop:
 
@@ -235,7 +215,8 @@ Exempel anrop:
 ```
 
 `start-execution` accepterar `--client-request-id`, `--timeout-seconds` och upprepad `--parameter name=value`.
-`execution-status` följer samma watch-beteende som v1-status.
+För `start-execution` betyder `--parameter` template-parameter till OpenShift Template.
+`execution-status` följer watch-beteende med samma flaggor som i exemplen (`--watch`, `--interval-seconds`, `--timeout-seconds`).
 `stop-execution` gör alltid graceful stop och raderar execution-Jobbet.
 
 #### Från terminal i en pod utan Gradle
@@ -262,7 +243,7 @@ sh /deployments/bin/run-cli.sh --namespace default execution-status <execution-n
 sh /deployments/bin/run-cli.sh --namespace default stop-execution <execution-name>
 ```
 
-Om du behöver HTTP-anrop direkt, se API-sektionerna ovan (v1/v2).
+Om du behöver HTTP-anrop direkt, se API-sektionen ovan.
 
 Exit-koder (CI/CD):
 - `0` = `SUCCEEDED` eller `STOPPED`
@@ -274,5 +255,24 @@ Exit-koder (CI/CD):
 
 ### Pods vid felsökning
 
-Vid `restart` styr `keepFailedPods` om terminala pods (`Failed`/`Succeeded`) ska behållas (`true`) eller rensas (`false`).
-För v2-executions kan poddar efter `FAILED` behållas för felsökning tills cluster-ttl städar dem (styrt av `ttlSecondsAfterFinished` i Job/template).
+För executions kan poddar efter `FAILED` behållas för felsökning tills cluster-ttl städar dem (styrt av `ttlSecondsAfterFinished` i Job/template).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

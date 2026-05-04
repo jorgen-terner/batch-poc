@@ -8,7 +8,7 @@ Imagen byggs med Quarkus fast-jar-artifakter producerade av modulen `inf-javabat
 - `Dockerfile` - bygger runtime-image och kopierar Quarkus-artifakter från `inf-javabatch/build/quarkus-app`.
 - `configmap.yaml` - sätter miljövariabler enligt README för `inf-javabatch`.
 - `job.yaml` - suspended Job-mall som laddar miljövariabler via ConfigMap.
-- `template.yaml` - OpenShift Template som skapar ett suspended template-Job för op-proxy-app v2.
+- `template.yaml` - OpenShift Template som skapar ett suspended template-Job för op-proxy-app.
 
 ## 1. Bygg Quarkus-artifakter
 
@@ -39,9 +39,9 @@ Sätt alltid `image` i `job.yaml` till OpenShifts interna registry, till exempel
 `image-registry.openshift-image-registry.svc:5000/dev252/inv-javabatch:latest`
 Byt `dev252` till ditt namespace.
 
-## 3. Skapa template-jobb för op-proxy-app v2
+## 3. Skapa template-jobb för op-proxy-app
 
-`op-proxy-app` v2 (`POST /api/v2/templates/{templateName}/start`) kan läsa en OpenShift Template-resurs direkt och skapa Job-objektet från den.
+`op-proxy-app` (`POST /api/templates/{templateName}/start`) kan läsa en OpenShift Template-resurs direkt och skapa Job-objektet från den.
 `executionName` kommer från `metadata.name` i processad template (inte från op-proxy-app).
 
 ### Steg 1: Registrera OpenShift Template
@@ -50,9 +50,9 @@ Byt `dev252` till ditt namespace.
 oc apply -f inv-javabatch/template.yaml
 ```
 
-Det är allt du behöver göra. op-proxy-app v2 kommer att läsa denna Template och skapa ett Job vid varje `start-execution`.
+Det är allt du behöver göra. op-proxy-app kommer att läsa denna Template och skapa ett Job vid varje `start-execution`.
 
-### Steg 2: Starta executions via op-proxy-app v2
+### Steg 2: Starta executions via op-proxy-app
 
 Starta executions direkt genom att använda Template-namnet:
 
@@ -63,7 +63,7 @@ Starta executions direkt genom att använda Template-namnet:
 Eller med curl:
 
 ```bash
-curl -X POST "http://op-proxy-app:8080/api/v2/templates/inv-javabatch-template/start" \
+curl -X POST "http://op-proxy-app:8080/api/templates/inv-javabatch-template/start" \
   -H "Content-Type: application/json" \
   -d '{
     "clientRequestId": "inv-4711",
@@ -94,6 +94,8 @@ Vid varje `start-execution` kommer op-proxy-app att:
 1. Läsa OpenShift Template `inv-javabatch-template`
 2. Köra `oc process inv-javabatch-template` för att generera Job-manifest
 3. Skapa Job-objektet med namnet från `metadata.name` i templaten
+
+Request-fältet `parameters` används enbart som template-parametrar till `oc process`/template-processering.
 
 I denna template genereras suffix på namn via:
 
@@ -170,19 +172,26 @@ Konfigurerade variabler (från `inf-javabatch/README.md`):
 - `FAILURE_STATUS_VALUES` (default `FAILED,ABANDONED,UNKNOWN,STOPPED`)
 - `JAVA_OPTS` (valfri)
 
-## Styrning via op-proxy-app CLI (v1 och v2)
+## Styrning via op-proxy-app CLI
 
-Om du vill starta och styra suspended/template-jobb via op-proxy-app kan du använda CLI från repo-roten `c:/repos/batch-poc`.
+Om du vill starta och styra template/execution-jobb via op-proxy-app kan du använda CLI från repo-roten `c:/repos/batch-poc`.
 
 ```powershell
 # Hjälp
 .\gradlew :op-proxy-app:runCli --args="--help"
 
-# v1 legacy (suspended Jobs)
-.\gradlew :op-proxy-app:runCli --args="--namespace dev252 start inv-javabatch-suspended --timeout-seconds 900"
-
-# v2 template/execution
+# template/execution
 .\gradlew :op-proxy-app:runCli --args="--namespace dev252 start-execution inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
 ```
 
-Se `op-proxy-app/README.md` för fullständig beskrivning av HTTP-API och komplett CLI-dokumentation (v1 + v2).
+Se `op-proxy-app/README.md` för fullständig beskrivning av HTTP-API och komplett CLI-dokumentation.
+
+
+
+
+
+
+
+
+
+

@@ -13,6 +13,8 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
+import java.util.Map;
+
 @Path("/")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -29,8 +31,14 @@ public class TemplateExecutionResource {
         this.namespace = namespace;
     }
 
+    @GET
+    @Path("health")
+    public Map<String, String> health() {
+        return Map.of("status", "UP");
+    }
+
     @POST
-    @Path("api/v2/templates/{templateName}/start")
+    @Path("api/templates/{templateName}/start")
     public ExecutionActionResponseVO start(
         @jakarta.ws.rs.PathParam("templateName") String templateName,
         StartExecutionRequestVO request
@@ -39,14 +47,16 @@ public class TemplateExecutionResource {
     }
 
     @GET
-    @Path("api/v2/executions/{executionName}")
+    @Path("api/executions/{executionName}")
     public ExecutionStatusResponseVO status(@jakarta.ws.rs.PathParam("executionName") String executionName) {
         return templateExecutionService.status(namespace, executionName);
     }
 
     @POST
-    @Path("api/v2/executions/{executionName}/stop")
+    @Path("api/executions/{executionName}/stop")
     public ExecutionActionResponseVO stop(@jakarta.ws.rs.PathParam("executionName") String executionName) {
         return templateExecutionService.stop(namespace, executionName);
     }
 }
+
+

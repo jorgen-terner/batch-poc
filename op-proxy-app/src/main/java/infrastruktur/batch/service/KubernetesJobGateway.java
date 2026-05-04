@@ -1,9 +1,6 @@
 package infrastruktur.batch.service;
 
-import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
-import io.fabric8.kubernetes.api.model.EnvVar;
-import io.fabric8.kubernetes.api.model.EnvVarBuilder;
 import io.fabric8.kubernetes.api.model.ManagedFieldsEntry;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodCondition;
@@ -35,7 +32,6 @@ public class KubernetesJobGateway {
     
     public static final String TEMPLATE_NAME_LABEL = "batch.template-name";
     public static final String EXECUTION_NAME_LABEL = "batch.execution-name";
-    public static final String RUN_NAME_LABEL = "batch.run-name";
 
     private static final List<String> RECREATED_TEMPLATE_LABEL_KEYS_TO_REMOVE = List.of(
         "controller-uid",
@@ -76,22 +72,6 @@ public class KubernetesJobGateway {
             .build());
     }
 
-    public void patchStartConfiguration(String namespace, String jobName, Long timeoutSeconds) {
-        client.batch().v1().jobs().inNamespace(namespace).withName(jobName).edit(j -> {
-            JobBuilder builder = new JobBuilder(j)
-                .editOrNewSpec()
-                .withSuspend(false)
-                .endSpec();
-
-            if (timeoutSeconds != null) {
-                builder.editOrNewSpec()
-                    .withActiveDeadlineSeconds(timeoutSeconds)
-                    .endSpec();
-            }
-            return builder.build();
-        });
-    }
-
     public int deleteActivePods(String namespace, String jobName) {
         var podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
         List<String> activePodNames = new ArrayList<>();
@@ -107,21 +87,6 @@ public class KubernetesJobGateway {
             client.pods().inNamespace(namespace).withName(podName).delete();
         }
         return activePodNames.size();
-    }
-
-    public int deletePods(String namespace, String jobName) {
-        var podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
-        List<String> podNames = new ArrayList<>();
-        for (Pod pod : podList.getItems()) {
-            if (pod.getMetadata() != null && pod.getMetadata().getName() != null) {
-                podNames.add(pod.getMetadata().getName());
-            }
-        }
-
-        for (String podName : podNames) {
-            client.pods().inNamespace(namespace).withName(podName).delete();
-        }
-        return podNames.size();
     }
 
     public int countActivePods(String namespace, String jobName) {
@@ -227,40 +192,21 @@ public class KubernetesJobGateway {
         client.batch().v1().jobs().inNamespace(namespace).withName(jobName).delete();
     }
 
-    public void deleteJobPreservingPods(String namespace, String jobName) {
-        client.batch().v1().jobs().inNamespace(namespace).withName(jobName)
-            .withPropagationPolicy(DeletionPropagation.ORPHAN)
-            .delete();
-    }
-
     public Job createJob(String namespace, Job job) {
         return client.batch().v1().jobs().inNamespace(namespace).resource(job).create();
     }
 
-    public void waitForDeletion(String namespace, String jobName, long pollIntervalMillis, int maxAttempts) {
-        for (int i = 0; i < maxAttempts; i++) {
-            Job job = client.batch().v1().jobs().inNamespace(namespace).withName(jobName).get();
-            if (job == null) {
-                return;
-            }
-            sleep(pollIntervalMillis);
-        }
-        throw new IllegalStateException("Timed out waiting for Job deletion: " + namespace + "/" + jobName);
-    }
-
-    private Job loadJobFromTemplate(String namespace, String templateName) {
-        Job jobFromTemplate = processOpenShiftTemplate(namespace, templateName);
+    private Job loadJobFromTemplate(String namespace, String templateName, Map<String, String> parameters) {
+        Job jobFromTemplate = processOpenShiftTemplate(namespace, templateName, parameters);
         if (jobFromTemplate != null) {
             LOG.info("Loaded Job from OpenShift Template: {}/{}", namespace, templateName);
             return jobFromTemplate;
         }
 
-        // Fallback används endast när Template-resursen saknas.
-        LOG.debug("Template not found, looking for Job resource instead: {}/{}", namespace, templateName);
-        return requireJob(namespace, templateName);
+        throw new TemplateProcessingException("Template not found: " + namespace + "/" + templateName);
     }
 
-    private Job processOpenShiftTemplate(String namespace, String templateName) {
+    private Job processOpenShiftTemplate(String namespace, String templateName, Map<String, String> parameters) {
         OpenShiftClient openShiftClient = adaptToOpenShiftClient();
         var templateResource = openShiftClient.templates().inNamespace(namespace).withName(templateName);
         var template = templateResource.get();
@@ -268,7 +214,12 @@ public class KubernetesJobGateway {
             return null;
         }
 
-        Map<String, String> templateParameters = Map.of("NAMESPACE", namespace);
+        Map<String, String> templateParameters = new LinkedHashMap<>();
+        if (parameters != null && !parameters.isEmpty()) {
+            templateParameters.putAll(parameters);
+        }
+        // Keep namespace fixed to runtime namespace even if a request parameter tries to override it.
+        templateParameters.put("NAMESPACE", namespace);
         KubernetesList processed;
         try {
             processed = templateResource.process(templateParameters);
@@ -356,53 +307,12 @@ public class KubernetesJobGateway {
         }
     }
 
-    public Job createRestartedJob(Job source, Long timeoutSeconds, Map<String, String> parameters) {
-        String name = source.getMetadata().getName();
-        String namespace = source.getMetadata().getNamespace();
-        List<EnvVar> existingEnv = getFirstContainerEnvOrThrow(source);
-        Map<String, String> sanitizedTemplateLabels = sanitizeTemplateLabels(source);
-
-        JobBuilder builder = new JobBuilder(source)
-            .editOrNewMetadata()
-            .withName(name)
-            .withNamespace(namespace)
-            .withResourceVersion(null)
-            .withUid(null)
-            .withCreationTimestamp(null)
-            .withGeneration(null)
-            .withManagedFields((List<ManagedFieldsEntry>) null)
-            .endMetadata()
-            .withStatus(null)
-            .editOrNewSpec()
-            .withSelector(null)
-            .withManualSelector(null)
-            .withSuspend(false)
-            .editOrNewTemplate()
-            .editOrNewMetadata()
-            .withLabels(sanitizedTemplateLabels)
-            .endMetadata()
-            .endTemplate()
-            .endSpec();
-
-        if (timeoutSeconds != null) {
-            builder.editOrNewSpec()
-                .withActiveDeadlineSeconds(timeoutSeconds)
-                .endSpec();
-        }
-
-        applyParametersToFirstContainer(builder, existingEnv, parameters);
-
-        return builder.build();
-    }
-
     public Job createExecutionFromTemplate(String namespace, String templateName, Long timeoutSeconds, Map<String, String> parameters) {
-        Job templateJob = loadJobFromTemplate(namespace, templateName);
+        Job templateJob = loadJobFromTemplate(namespace, templateName, parameters);
         String executionName = extractRequiredJobName(templateJob);
-        List<EnvVar> existingEnv = getFirstContainerEnvOrThrow(templateJob);
         Map<String, String> runLabels = sanitizeTemplateLabels(templateJob);
         runLabels.put(TEMPLATE_NAME_LABEL, templateName);
         runLabels.put(EXECUTION_NAME_LABEL, executionName);
-        runLabels.put(RUN_NAME_LABEL, executionName);
 
         JobBuilder builder = new JobBuilder(templateJob)
             .editOrNewMetadata()
@@ -415,7 +325,6 @@ public class KubernetesJobGateway {
             .withManagedFields((List<ManagedFieldsEntry>) null)
             .addToLabels(TEMPLATE_NAME_LABEL, templateName)
             .addToLabels(EXECUTION_NAME_LABEL, executionName)
-            .addToLabels(RUN_NAME_LABEL, executionName)
             .endMetadata()
             .withStatus(null)
             .editOrNewSpec()
@@ -434,8 +343,6 @@ public class KubernetesJobGateway {
                 .withActiveDeadlineSeconds(timeoutSeconds)
                 .endSpec();
         }
-
-        applyParametersToFirstContainer(builder, existingEnv, parameters);
         return createJob(namespace, builder.build());
     }
 
@@ -459,51 +366,6 @@ public class KubernetesJobGateway {
             labels.remove(key);
         }
         return labels;
-    }
-
-    private void applyParametersToFirstContainer(JobBuilder builder, List<EnvVar> existingEnv, Map<String, String> parameters) {
-        if (parameters == null || parameters.isEmpty()) {
-            return;
-        }
-
-        builder.editOrNewSpec()
-            .editOrNewTemplate()
-            .editOrNewSpec()
-            .editFirstContainer()
-            .withEnv(mergeEnvVars(existingEnv, parameters))
-            .endContainer()
-            .endSpec()
-            .endTemplate()
-            .endSpec();
-    }
-
-    private List<EnvVar> getFirstContainerEnvOrThrow(Job job) {
-        if (job.getSpec() == null
-            || job.getSpec().getTemplate() == null
-            || job.getSpec().getTemplate().getSpec() == null
-            || job.getSpec().getTemplate().getSpec().getContainers() == null
-            || job.getSpec().getTemplate().getSpec().getContainers().isEmpty()) {
-            throw new TemplateProcessingException("Job must define at least one container in spec.template.spec.containers");
-        }
-        List<EnvVar> env = job.getSpec().getTemplate().getSpec().getContainers().get(0).getEnv();
-        return env != null ? env : new ArrayList<>();
-    }
-
-    private List<EnvVar> mergeEnvVars(List<EnvVar> existingEnv, Map<String, String> parameters) {
-        Map<String, EnvVar> merged = new LinkedHashMap<>();
-        if (existingEnv != null) {
-            for (EnvVar envVar : existingEnv) {
-                if (envVar != null && envVar.getName() != null) {
-                    merged.put(envVar.getName(), envVar);
-                }
-            }
-        }
-
-        for (Map.Entry<String, String> entry : parameters.entrySet()) {
-            merged.put(entry.getKey(), new EnvVarBuilder().withName(entry.getKey()).withValue(entry.getValue()).build());
-        }
-
-        return new ArrayList<>(merged.values());
     }
 
     private void sleep(long millis) {

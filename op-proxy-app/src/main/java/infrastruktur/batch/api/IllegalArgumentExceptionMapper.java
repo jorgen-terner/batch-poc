@@ -18,7 +18,8 @@ public class IllegalArgumentExceptionMapper implements ExceptionMapper<IllegalAr
         return Response.status(Response.Status.BAD_REQUEST)
             .entity(Map.of(
                 "error", "Invalid request",
-                "code", "BAD_REQUEST"
+                "code", "BAD_REQUEST",
+                "message", exception.getMessage() != null ? exception.getMessage() : ""
             ))
             .build();
     }

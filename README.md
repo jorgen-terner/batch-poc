@@ -44,7 +44,7 @@ Content-Type: application/json
     "SIMULATION_STEPS": "10",
     "LOG_LEVEL": "DEBUG"
   },
-  "image": "image-registry.openshift-image-registry.svc:5000/dev252/inf-batch-testapp1:v2.0"
+  "image": "image-registry.openshift-image-registry.svc:5000/dev252/inf-batch-testapp1:latest"
 }
 ```
 
@@ -100,9 +100,9 @@ Skapar en ny jobbkörning med samma grundkonfiguration som ursprungsjobbet (conf
 **Status värden:** `PENDING`, `RUNNING`, `COMPLETED`, `FAILED`
 ```
 
-## op-proxy-app CLI-exempel (v1 och v2)
+## op-proxy-app CLI-exempel
 
-För batchflöden via `op-proxy-app` finns både legacy v1 (suspended Jobs) och v2 (template/execution).
+För batchflöden via `op-proxy-app` används template/execution.
 
 Snabbexempel från projektroten:
 
@@ -110,14 +110,11 @@ Snabbexempel från projektroten:
 # Visa hjälp
 .\gradlew :op-proxy-app:runCli --args="--help"
 
-# v1: starta suspended Job
-.\gradlew :op-proxy-app:runCli --args="--namespace dev252 start inv-javabatch-suspended --timeout-seconds 900"
-
-# v2: starta execution från template
+# starta execution från template
 .\gradlew :op-proxy-app:runCli --args="--namespace dev252 start-execution inv-javabatch-template --client-request-id inv-4711 --timeout-seconds 900"
 ```
 
-`op-proxy-app/README.md` är source of truth för full CLI-dokumentation (v1 + v2), parametrar och fler exempel.
+`op-proxy-app/README.md` är source of truth för full CLI-dokumentation, parametrar och fler exempel.
 
 ### BATCH_TYP och statistikrapportering
 
@@ -315,3 +312,7 @@ oc logs -f deployment/inf-batch-job
 
 ### Memory/CPU issues
 Justera resource limits i `values.yaml`.
+
+
+
+
