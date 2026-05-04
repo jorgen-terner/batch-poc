@@ -100,8 +100,6 @@ Exempel för lokal start:
 LOG_LEVEL=DEBUG ./gradlew quarkusDev
 ```
 
-Notis: bakåtkompatibilitet finns kvar för `OP_PROXY_APP_LOG_LEVEL` och `QUARKUS_LOG_LEVEL`, men `LOG_LEVEL` är den rekommenderade variabeln framöver.
-
 ## Template-baserat API
 
 API:t används för template-baserade körningar i OpenShift/Kubernetes.
