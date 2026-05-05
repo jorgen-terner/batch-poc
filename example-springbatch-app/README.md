@@ -7,34 +7,34 @@ Jobbet gör följande:
 2. Sover i `SLEEP_SECONDS`
 3. Upprepar sleep `EXTRA` gånger
 4. Loggar efter varje sleep-runda
-4. Avslutar
+5. Avslutar
 
 ## Bygg lokalt
 
-Kör från repo-roten:
+Kör från katalogen `example-springbatch-app`:
 
 ```bash
-./gradlew :example-springbatch-app:build -x test
+../gradlew :example-springbatch-app:build -x test
 ```
 
 JAR byggs till:
 
-`example-springbatch-app/build/libs/example-springbatch-app-0.1.0.jar`
+`build/libs/example-springbatch-app-0.1.0.jar`
 
 ## Bygg image i OpenShift
 
-Kör från repo-roten:
+Kör från katalogen `example-springbatch-app`:
 
 ```bash
 oc new-build --name=example-springbatch-app --binary=true --strategy=docker --to=example-springbatch-app:latest
-oc patch bc/example-springbatch-app -p '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"example-springbatch-app/Dockerfile"}}}}'
+oc patch bc/example-springbatch-app -p '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"Dockerfile"}}}}'
 oc start-build example-springbatch-app --from-dir=. --follow
 ```
 
 ## Registrera template
 
 ```bash
-oc apply -f example-springbatch-app/template.yaml
+oc apply -f template.yaml
 ```
 
 Template-namn:

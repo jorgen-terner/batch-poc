@@ -1,0 +1,8 @@
+# Keep Docker build context minimal for this module
+*
+
+# Include only what Dockerfile needs
+!Dockerfile
+!build/
+!build/libs/
+!build/libs/example-springbatch-app-0.1.0.jar
