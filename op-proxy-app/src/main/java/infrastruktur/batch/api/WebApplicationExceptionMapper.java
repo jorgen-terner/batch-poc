@@ -1,8 +1,8 @@
 package infrastruktur.batch.api;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
 import org.slf4j.Logger;
@@ -10,6 +10,10 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
+/**
+ * Maps generic WebApplicationException to structured error response.
+ * Handles unexpected web framework errors without leaking internal detail.
+ */
 @Provider
 public class WebApplicationExceptionMapper implements ExceptionMapper<WebApplicationException> {
     private static final Logger LOG = LoggerFactory.getLogger(WebApplicationExceptionMapper.class);
@@ -18,18 +22,6 @@ public class WebApplicationExceptionMapper implements ExceptionMapper<WebApplica
     public Response toResponse(WebApplicationException exception) {
         Response exceptionResponse = exception.getResponse();
         int status = exceptionResponse == null ? Response.Status.INTERNAL_SERVER_ERROR.getStatusCode() : exceptionResponse.getStatus();
-
-        String deserializationMessage = extractDeserializationMessage(exception);
-        if (status == Response.Status.BAD_REQUEST.getStatusCode() && deserializationMessage != null) {
-            LOG.warn("Invalid request body: {}", deserializationMessage);
-            return Response.status(Response.Status.BAD_REQUEST)
-                .entity(Map.of(
-                    "error", "Invalid request body",
-                    "code", "BAD_REQUEST",
-                    "message", deserializationMessage
-                ))
-                .build();
-        }
 
         Response.Status statusEnum = Response.Status.fromStatusCode(status);
         String code = statusEnum == null ? "HTTP_" + status : statusEnum.name();
@@ -45,26 +37,12 @@ public class WebApplicationExceptionMapper implements ExceptionMapper<WebApplica
         }
 
         return Response.status(status)
+            .type(MediaType.APPLICATION_JSON)
             .entity(Map.of(
                 "error", "Request failed",
                 "code", code,
                 "message", message
             ))
             .build();
-    }
-
-    private String extractDeserializationMessage(Throwable exception) {
-        Throwable current = exception;
-        while (current != null) {
-            if (current instanceof JsonProcessingException jsonException) {
-                String location = jsonException.getLocation() == null
-                    ? ""
-                    : " (line " + jsonException.getLocation().getLineNr()
-                        + ", column " + jsonException.getLocation().getColumnNr() + ")";
-                return "Request body could not be deserialized" + location + ": " + jsonException.getOriginalMessage();
-            }
-            current = current.getCause();
-        }
-        return null;
     }
 }

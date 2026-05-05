@@ -54,19 +54,13 @@ public class TemplateExecutionResource {
 
     private StartExecutionRequestVO deserializeStartRequest(String rawRequestBody) {
         if (rawRequestBody == null || rawRequestBody.isBlank()) {
-            return null;
+            return null;  // Empty body is OK for start; all fields are optional
         }
         try {
             return objectMapper.readValue(rawRequestBody, StartExecutionRequestVO.class);
         } catch (JsonProcessingException exception) {
-            String location = exception.getLocation() == null
-                ? ""
-                : " (line " + exception.getLocation().getLineNr()
-                    + ", column " + exception.getLocation().getColumnNr() + ")";
-            throw new IllegalArgumentException(
-                "Request body could not be deserialized" + location + ": " + exception.getOriginalMessage(),
-                exception
-            );
+            String message = JsonErrorHelper.extractJsonErrorMessage(exception);
+            throw new IllegalArgumentException(message, exception);
         }
     }
 

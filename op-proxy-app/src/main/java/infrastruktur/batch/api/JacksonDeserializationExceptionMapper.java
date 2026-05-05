@@ -10,35 +10,30 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Maps Jackson deserialization failures (malformed JSON, wrong types, missing
- * object wrappers, etc.) to a structured HTTP 400 response.
+ * DEPRECATED: Use JsonErrorHelper utility instead.
  *
- * <p>Without this mapper the RESTEasy Reactive {@code RequestDeserializeHandler}
- * may produce an unformatted 400 or even a 500 that leaks internal detail. This
- * mapper intentionally suppresses the full stack trace in the response to avoid
- * information leakage while still logging enough context for debugging.
+ * This class is kept for reference but is no longer registered as a @Provider.
+ * Deserialization errors are now handled uniformly through
+ * IllegalArgumentExceptionMapper by having resource methods deserialize
+ * explicitly and throw IllegalArgumentException on malformed input.
+ *
+ * Deserialization failures map to HTTP 400 Bad Request with structured JSON:
+ * {
+ *   "error": "Invalid request",
+ *   "code": "BAD_REQUEST",
+ *   "message": "Request body could not be deserialized ..."
+ * }
  */
-@Provider
 public class JacksonDeserializationExceptionMapper implements ExceptionMapper<JsonProcessingException> {
 
     private static final Logger LOG = LoggerFactory.getLogger(JacksonDeserializationExceptionMapper.class);
 
     @Override
     public Response toResponse(JsonProcessingException exception) {
-        // Log the location (line/column) but not the full payload value to avoid
-        // leaking sensitive content in logs.
-        String location = exception.getLocation() != null
-                ? " (line " + exception.getLocation().getLineNr()
-                  + ", column " + exception.getLocation().getColumnNr() + ")"
-                : "";
-        LOG.warn("Request body could not be deserialized{}: {}", location, exception.getOriginalMessage());
-        return Response.status(Response.Status.BAD_REQUEST)
-                .entity(Map.of(
-                        "error", "Invalid request body",
-                        "code", "BAD_REQUEST",
-                        "message", "Request body could not be deserialized" + location
-                                   + ": " + exception.getOriginalMessage()
-                ))
-                .build();
+        // NOT REGISTERED - this method should not be called.
+        throw new UnsupportedOperationException(
+            "JacksonDeserializationExceptionMapper is deprecated. " +
+            "Use JsonErrorHelper instead, or let resources deserialize explicitly."
+        );
     }
 }

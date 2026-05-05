@@ -10,39 +10,23 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
+/**
+ * DEPRECATED: Use JsonErrorHelper utility instead.
+ *
+ * This class was experimental for RESTEasy Reactive @ServerExceptionMapper.
+ * Consolidated into IllegalArgumentExceptionMapper approach for unified error handling.
+ *
+ * All 400 Bad Request responses now follow the same contract via
+ * IllegalArgumentExceptionMapper, delegating deserialization to resource methods.
+ */
 public class ReactiveBadRequestExceptionMapper {
     private static final Logger LOG = LoggerFactory.getLogger(ReactiveBadRequestExceptionMapper.class);
 
-    @ServerExceptionMapper
+    // @ServerExceptionMapper removed - this mapper is not active
     public Response mapBadRequest(BadRequestException exception) {
-        String message = extractDeserializationMessage(exception);
-        if (message == null || message.isBlank()) {
-            message = "Invalid request body";
-        }
-
-        LOG.warn("Bad request: {}", message);
-        return Response.status(Response.Status.BAD_REQUEST)
-            .type(MediaType.APPLICATION_JSON)
-            .entity(Map.of(
-                "error", "Invalid request body",
-                "code", "BAD_REQUEST",
-                "message", message
-            ))
-            .build();
-    }
-
-    private String extractDeserializationMessage(Throwable exception) {
-        Throwable current = exception;
-        while (current != null) {
-            if (current instanceof JsonProcessingException jsonException) {
-                String location = jsonException.getLocation() == null
-                    ? ""
-                    : " (line " + jsonException.getLocation().getLineNr()
-                        + ", column " + jsonException.getLocation().getColumnNr() + ")";
-                return "Request body could not be deserialized" + location + ": " + jsonException.getOriginalMessage();
-            }
-            current = current.getCause();
-        }
-        return null;
+        throw new UnsupportedOperationException(
+            "ReactiveBadRequestExceptionMapper is deprecated. " +
+            "Use IllegalArgumentExceptionMapper via JsonErrorHelper instead."
+        );
     }
 }
