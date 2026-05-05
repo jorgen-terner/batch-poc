@@ -64,3 +64,16 @@ När jobbet startar loggar den ungefär:
 - `Sleep round 2/3 finished.`
 - `Sleep round 3/3 started.`
 - `Sleep round 3/3 finished.`
+
+## Stoppa körning via op-proxy-app
+
+1. Starta en execution via template-endpointen ovan.
+2. Läs ut `executionName` från svaret.
+3. Anropa stop-endpointen:
+
+```bash
+curl -sS -X POST "http://localhost:8080/api/executions/$EXECUTION_NAME/stop" \
+  -H "Content-Type: application/json"
+```
+
+Appen hanterar nu avbrott under sleep och loggar att körningen avslutas tidigt när stop begärs.

@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
@@ -38,8 +39,20 @@ public class BatchJobConfig {
                 int repeatCount = Math.max(0, extra);
                 LOG.info("Spring Batch example job started. Will sleep {} time(s), {} second(s) each time.", repeatCount, effectiveSleep);
                 for (int i = 1; i <= repeatCount; i++) {
+                    if (Thread.currentThread().isInterrupted()) {
+                        LOG.warn("Stop requested before sleep round {}/{}. Finishing early.", i, repeatCount);
+                        contribution.setExitStatus(new ExitStatus("STOPPED", "Interrupted before sleep round"));
+                        return RepeatStatus.FINISHED;
+                    }
                     LOG.info("Sleep round {}/{} started.", i, repeatCount);
-                    Thread.sleep(effectiveSleep * 1000L);
+                    try {
+                        Thread.sleep(effectiveSleep * 1000L);
+                    } catch (InterruptedException interruptedException) {
+                        Thread.currentThread().interrupt();
+                        LOG.warn("Stop requested during sleep round {}/{}. Finishing early.", i, repeatCount);
+                        contribution.setExitStatus(new ExitStatus("STOPPED", "Interrupted during sleep round"));
+                        return RepeatStatus.FINISHED;
+                    }
                     LOG.info("Sleep round {}/{} finished.", i, repeatCount);
                 }
                 LOG.info("Spring Batch example job finished after {} sleep round(s).", repeatCount);
