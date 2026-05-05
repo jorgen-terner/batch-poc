@@ -1,5 +1,7 @@
 package infrastruktur.batch.api;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import infrastruktur.batch.model.ExecutionActionResponseVO;
 import infrastruktur.batch.model.ExecutionStatusResponseVO;
 import infrastruktur.batch.model.StartExecutionRequestVO;
@@ -20,14 +22,17 @@ import java.util.Map;
 @Consumes(MediaType.APPLICATION_JSON)
 public class TemplateExecutionResource {
     private final TemplateExecutionService templateExecutionService;
+    private final ObjectMapper objectMapper;
     private final String namespace;
 
     @Inject
     public TemplateExecutionResource(
         TemplateExecutionService templateExecutionService,
+        ObjectMapper objectMapper,
         @ConfigProperty(name = "batch.job.namespace", defaultValue = "default") String namespace
     ) {
         this.templateExecutionService = templateExecutionService;
+        this.objectMapper = objectMapper;
         this.namespace = namespace;
     }
 
@@ -41,9 +46,28 @@ public class TemplateExecutionResource {
     @Path("api/templates/{templateName}/start")
     public ExecutionActionResponseVO start(
         @jakarta.ws.rs.PathParam("templateName") String templateName,
-        StartExecutionRequestVO request
+        String rawRequestBody
     ) {
+        StartExecutionRequestVO request = deserializeStartRequest(rawRequestBody);
         return templateExecutionService.start(namespace, templateName, request);
+    }
+
+    private StartExecutionRequestVO deserializeStartRequest(String rawRequestBody) {
+        if (rawRequestBody == null || rawRequestBody.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(rawRequestBody, StartExecutionRequestVO.class);
+        } catch (JsonProcessingException exception) {
+            String location = exception.getLocation() == null
+                ? ""
+                : " (line " + exception.getLocation().getLineNr()
+                    + ", column " + exception.getLocation().getColumnNr() + ")";
+            throw new IllegalArgumentException(
+                "Request body could not be deserialized" + location + ": " + exception.getOriginalMessage(),
+                exception
+            );
+        }
     }
 
     @GET
