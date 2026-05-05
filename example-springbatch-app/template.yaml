@@ -1,0 +1,54 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: example-springbatch-template
+  annotations:
+    description: "Spring Batch sleep example template for op-proxy-app"
+parameters:
+  - name: NAMESPACE
+    description: "OpenShift namespace where the Job is created"
+    value: dev252
+  - name: TEMPLATE_JOB_NAME
+    description: "Generated Job name"
+    generate: expression
+    from: "example-springbatch-[a-z0-9]{6}"
+  - name: IMAGE
+    description: "Container image for example-springbatch-app"
+    value: image-registry.openshift-image-registry.svc:5000/dev252/example-springbatch-app:latest
+  - name: SLEEP_SECONDS
+    description: "How many seconds the job should sleep"
+    value: "10"
+  - name: EXTRA
+    description: "How many times sleep should be repeated"
+    value: "1"
+  - name: TTL_SECONDS
+    description: "Job TTL after completion"
+    value: "300"
+objects:
+  - apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: ${TEMPLATE_JOB_NAME}
+      namespace: ${NAMESPACE}
+      labels:
+        app: example-springbatch-app
+        batch.role: template
+    spec:
+      suspend: true
+      backoffLimit: 0
+      ttlSecondsAfterFinished: ${TTL_SECONDS}
+      template:
+        metadata:
+          labels:
+            app: example-springbatch-app
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: example-springbatch-app
+              image: ${IMAGE}
+              imagePullPolicy: Always
+              env:
+                - name: SLEEP_SECONDS
+                  value: ${SLEEP_SECONDS}
+                - name: EXTRA
+                  value: ${EXTRA}

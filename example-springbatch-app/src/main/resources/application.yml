@@ -1,0 +1,17 @@
+spring:
+  main:
+    web-application-type: none
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: true
+      name: sleepJob
+
+logging:
+  level:
+    root: INFO
+
+app:
+  sleep-seconds: ${SLEEP_SECONDS:10}
+  extra: ${EXTRA:1}
