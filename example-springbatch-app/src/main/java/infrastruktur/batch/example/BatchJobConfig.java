@@ -14,6 +14,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import java.time.Duration;
+
 @Configuration
 public class BatchJobConfig {
 
@@ -30,6 +32,7 @@ public class BatchJobConfig {
     public Step sleepStep(
         JobRepository jobRepository,
         PlatformTransactionManager transactionManager,
+        StopSignalState stopSignalState,
         @Value("${app.sleep-seconds:10}") long sleepSeconds,
         @Value("${app.extra:1}") int extra
     ) {
@@ -39,18 +42,23 @@ public class BatchJobConfig {
                 int repeatCount = Math.max(0, extra);
                 LOG.info("Spring Batch example job started. Will sleep {} time(s), {} second(s) each time.", repeatCount, effectiveSleep);
                 for (int i = 1; i <= repeatCount; i++) {
-                    if (Thread.currentThread().isInterrupted()) {
+                    if (stopSignalState.isStopRequested() || Thread.currentThread().isInterrupted()) {
                         LOG.warn("Stop requested before sleep round {}/{}. Finishing early.", i, repeatCount);
                         contribution.setExitStatus(new ExitStatus("STOPPED", "Interrupted before sleep round"));
                         return RepeatStatus.FINISHED;
                     }
                     LOG.info("Sleep round {}/{} started.", i, repeatCount);
                     try {
-                        Thread.sleep(effectiveSleep * 1000L);
+                        sleepInterruptibly(Duration.ofSeconds(effectiveSleep), stopSignalState);
                     } catch (InterruptedException interruptedException) {
                         Thread.currentThread().interrupt();
                         LOG.warn("Stop requested during sleep round {}/{}. Finishing early.", i, repeatCount);
                         contribution.setExitStatus(new ExitStatus("STOPPED", "Interrupted during sleep round"));
+                        return RepeatStatus.FINISHED;
+                    }
+                    if (stopSignalState.isStopRequested()) {
+                        LOG.warn("Stop requested during sleep round {}/{}. Finishing early.", i, repeatCount);
+                        contribution.setExitStatus(new ExitStatus("STOPPED", "Stop signal received during sleep round"));
                         return RepeatStatus.FINISHED;
                     }
                     LOG.info("Sleep round {}/{} finished.", i, repeatCount);
@@ -59,5 +67,22 @@ public class BatchJobConfig {
                 return RepeatStatus.FINISHED;
             }, transactionManager)
             .build();
+    }
+
+    private void sleepInterruptibly(Duration totalDuration, StopSignalState stopSignalState) throws InterruptedException {
+        final long totalMillis = Math.max(0, totalDuration.toMillis());
+        final long pollMillis = 200;
+        long sleptMillis = 0;
+
+        while (sleptMillis < totalMillis) {
+            if (stopSignalState.isStopRequested()) {
+                return;
+            }
+
+            long remaining = totalMillis - sleptMillis;
+            long nextSleep = Math.min(pollMillis, remaining);
+            Thread.sleep(nextSleep);
+            sleptMillis += nextSleep;
+        }
     }
 }

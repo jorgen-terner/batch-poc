@@ -27,7 +27,6 @@ Kör från katalogen `example-springbatch-app`:
 
 ```bash
 oc new-build --name=example-springbatch-app --binary=true --strategy=docker --to=example-springbatch-app:latest
-oc patch bc/example-springbatch-app -p '{"spec":{"strategy":{"dockerStrategy":{"dockerfilePath":"Dockerfile"}}}}'
 oc start-build example-springbatch-app --from-dir=. --follow
 ```
 
@@ -76,4 +75,4 @@ curl -sS -X POST "http://localhost:8080/api/executions/$EXECUTION_NAME/stop" \
   -H "Content-Type: application/json"
 ```
 
-Appen hanterar nu avbrott under sleep och loggar att körningen avslutas tidigt när stop begärs.
+Appen hanterar nu TERM/INT från wrappern kontrollerat: den markerar stop begärt, avbryter sleep-loopar snabbt och avslutar steget med `STOPPED` i stället för att avslutas abrupt.
