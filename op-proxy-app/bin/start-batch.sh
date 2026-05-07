@@ -6,7 +6,7 @@ usage() {
 Startar en execution via op-proxy-app HTTP-API och pollar status tills terminalt läge.
 
 Användning:
-  start-execution-http.sh --template TEMPLATE_NAME [flaggor]
+  start-batch.sh --template TEMPLATE_NAME [flaggor]
 
 Flaggor:
   --template NAME              Template-namn (krävs)
@@ -21,12 +21,15 @@ Flaggor:
 
 Exit-koder:
   0   SUCCEEDED eller STOPPED
-  10  RUNNING eller PENDING (används inte i watch-läget, men finns för kompatibilitet)
   2   FAILED
   3   SUSPENDED
   4   UNKNOWN eller oväntat läge
   124 Timeout i watch-läge
+  130 Avbruten av SIGINT (Ctrl+C) — stop-anrop skickas först
+  143 Avbruten av SIGTERM — stop-anrop skickas först
   1   Fel i skript/anrop/validering
+
+Skriptet skickar automatiskt ett stop-anrop till op-proxy-app vid Ctrl+C eller SIGTERM.
 EOF
 }
 
@@ -65,9 +68,6 @@ phase_to_exit_code() {
       ;;
     SUSPENDED)
       echo 3
-      ;;
-    UNKNOWN|"")
-      echo 4
       ;;
     *)
       echo 4
@@ -110,6 +110,7 @@ api_request() {
 BASE_URL="${OP_PROXY_BASE_URL:-http://localhost:8080}"
 TEMPLATE_NAME=""
 CLIENT_REQUEST_ID=""
+execution_name=""
 START_TIMEOUT_SECONDS=""
 INTERVAL_SECONDS=5
 WATCH_TIMEOUT_SECONDS=3600
@@ -196,6 +197,30 @@ require_cmd jq
 
 BASE_URL="${BASE_URL%/}"
 
+on_signal() {
+  _signal="$1"
+  echo "" >&2
+  echo "Avbruten (${_signal})." >&2
+  if [ -n "$execution_name" ]; then
+    echo "Skickar stop-anrop för körning $execution_name ..." >&2
+    _stop_url="$BASE_URL/api/executions/$execution_name/stop"
+    curl ${INSECURE_TLS:+"-k"} --silent --output /dev/null \
+      --request POST \
+      --header "Accept: application/json" \
+      "$_stop_url" 2>/dev/null \
+      && echo "Stop-anrop skickat." >&2 \
+      || echo "Varning: stop-anrop misslyckades." >&2
+  fi
+  case "$_signal" in
+    INT)  exit 130 ;;
+    TERM) exit 143 ;;
+    *)    exit 1   ;;
+  esac
+}
+
+trap 'on_signal INT'  INT
+trap 'on_signal TERM' TERM
+
 start_payload="$(jq -cn \
   --arg clientRequestId "$CLIENT_REQUEST_ID" \
   --arg timeoutSeconds "$START_TIMEOUT_SECONDS" \
@@ -207,7 +232,7 @@ start_payload="$(jq -cn \
   } | with_entries(select(.value != null))')" || die "Kunde inte bygga start-payload med jq"
 
 start_url="$BASE_URL/api/templates/$TEMPLATE_NAME/start"
-start_response="$(api_request POST "$start_url" "$start_payload")"
+start_response="$(api_request POST "$start_url" "$start_payload")" || die "Misslyckades att starta körning via $start_url"
 
 execution_name="$(printf '%s' "$start_response" | jq -r '.executionName // empty')" || die "Kunde inte läsa executionName från start-svar"
 [ -n "$execution_name" ] || die "start-svaret saknar executionName. Svar: $start_response"
@@ -218,7 +243,7 @@ started_epoch="$(date +%s)"
 status_url="$BASE_URL/api/executions/$execution_name"
 
 while true; do
-  status_response="$(api_request GET "$status_url")"
+  status_response="$(api_request GET "$status_url")" || die "Misslyckades att hämta status från $status_url"
   phase="$(printf '%s' "$status_response" | jq -r '.phase // "UNKNOWN"' | tr '[:lower:]' '[:upper:]')" || die "Kunde inte läsa fas från status-svar"
   exit_code="$(phase_to_exit_code "$phase")"
 

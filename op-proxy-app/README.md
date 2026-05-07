@@ -244,9 +244,9 @@ sh /deployments/bin/run-cli.sh --namespace default stop-execution <execution-nam
 För ett rent HTTP-flöde (start + polling till terminalt läge) finns även:
 
 ```bash
-sh /deployments/bin/start-execution-http.sh --template inv-javabatch-template
-sh /deployments/bin/start-execution-http.sh --template inv-javabatch-template --parameter businessDate=2026-05-07 --parameter runType=FULL
-sh /deployments/bin/start-execution-http.sh --template inv-javabatch-template --base-url https://op-proxy-app.<namespace>.apps.example.com --insecure
+sh /deployments/bin/start-batch.sh --template inv-javabatch-template
+sh /deployments/bin/start-batch.sh --template inv-javabatch-template --parameter businessDate=2026-05-07 --parameter runType=FULL
+sh /deployments/bin/start-batch.sh --template inv-javabatch-template --base-url https://op-proxy-app.<namespace>.apps.example.com --insecure
 ```
 
 Skriptet anropar `POST /api/templates/{templateName}/start`, läser ut `executionName`, pollar `GET /api/executions/{executionName}` tills terminal status och returnerar exit-kod enligt tabellen nedan.
