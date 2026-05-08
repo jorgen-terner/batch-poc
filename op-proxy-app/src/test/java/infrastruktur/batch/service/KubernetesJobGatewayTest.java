@@ -11,6 +11,7 @@ import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.NoSuchElementException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -110,6 +111,12 @@ class KubernetesJobGatewayTest {
     @Test
     void countActivePodsShouldReturnZeroWhenNoPods() {
         assertEquals(0, gateway.countActivePods(NS, "no-pods-job"));
+    }
+
+    @Test
+    void readExecutionLogsShouldReturnEmptyWhenNoPods() {
+        Map<String, String> logs = gateway.readExecutionLogs(NS, "no-pods-job", null);
+        assertTrue(logs.isEmpty());
     }
 
     // ─── deleteActivePods ──────────────────────────────────────────────────────

@@ -2,11 +2,15 @@ package infrastruktur.batch.service;
 
 import infrastruktur.batch.metrics.JobMetricsReporter;
 import infrastruktur.batch.model.ExecutionActionResponseVO;
+import infrastruktur.batch.model.ExecutionLogsResponseVO;
 import infrastruktur.batch.model.ExecutionStatusResponseVO;
+import infrastruktur.batch.model.ExecutionStreamEventVO;
 import infrastruktur.batch.model.StartExecutionRequestVO;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
 import io.fabric8.kubernetes.api.model.batch.v1.JobStatus;
 import io.fabric8.kubernetes.client.KubernetesClientException;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -14,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Map;
 
 @ApplicationScoped
@@ -127,6 +132,86 @@ public class TemplateExecutionService {
             completionTime,
             elapsed
         );
+    }
+
+    public ExecutionLogsResponseVO logs(String namespace, String executionName, Integer tailLines) {
+        if (tailLines != null && tailLines < 1) {
+            throw new IllegalArgumentException("tailLines must be >= 1");
+        }
+
+        Job executionJob = kubernetesJobGateway.requireJob(namespace, executionName);
+        Map<String, String> logsByPod = kubernetesJobGateway.readExecutionLogs(namespace, executionName, tailLines);
+        return new ExecutionLogsResponseVO(
+            namespace,
+            resolveTemplateName(executionJob),
+            executionName,
+            tailLines,
+            logsByPod
+        );
+    }
+
+    /**
+     * Returnerar en SSE-ström med periodiska statusuppdateringar och loggar när körningen avslutas.
+     * Strömmen stängs automatiskt när terminal fas nåtts (SUCCEEDED, FAILED, STOPPED, m.fl.).
+     */
+    public Multi<ExecutionStreamEventVO> streamExecution(String namespace, String executionName, int intervalSeconds) {
+        if (intervalSeconds < 1) {
+            throw new IllegalArgumentException("intervalSeconds must be >= 1");
+        }
+        // Fail-fast: verify the job exists before opening the SSE stream.
+        // The job may disappear later during the loop; that is handled gracefully below.
+        kubernetesJobGateway.requireJob(namespace, executionName);
+        long pollMillis = (long) intervalSeconds * 1000L;
+
+        return Multi.createFrom().<ExecutionStreamEventVO>emitter(emitter -> {
+            try {
+                while (!emitter.isCancelled()) {
+                    ExecutionStatusResponseVO s;
+                    try {
+                        s = status(namespace, executionName);
+                    } catch (KubernetesClientException ex) {
+                        LOG.warn("Transient Kubernetes error while streaming {}/{}, will retry: {}",
+                            namespace, executionName, ex.getMessage());
+                        Thread.sleep(pollMillis);
+                        continue;
+                    }
+
+                    emitter.emit(ExecutionStreamEventVO.status(s));
+
+                    if (isTerminalPhase(s.phase())) {
+                        ExecutionLogsResponseVO logsVO = logs(namespace, executionName, null);
+                        logsVO.logsByPod().forEach((pod, output) ->
+                            emitter.emit(ExecutionStreamEventVO.log(pod, output)));
+                        emitter.emit(ExecutionStreamEventVO.done(s.phase(), phaseToExitCode(s.phase())));
+                        emitter.complete();
+                        return;
+                    }
+
+                    Thread.sleep(pollMillis);
+                }
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                emitter.complete();
+            } catch (Exception ex) {
+                emitter.fail(ex);
+            }
+        }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+    }
+
+    private static boolean isTerminalPhase(String phase) {
+        return switch (phase.toUpperCase(Locale.ROOT)) {
+            case "SUCCEEDED", "FAILED", "STOPPED", "CANCELLED" -> true;
+            default -> false;
+        };
+    }
+
+    private static int phaseToExitCode(String phase) {
+        return switch (phase.toUpperCase(Locale.ROOT)) {
+            case "SUCCEEDED", "STOPPED", "CANCELLED" -> 0;
+            case "FAILED" -> 2;
+            case "SUSPENDED" -> 3;
+            default -> 4;
+        };
     }
 
     public ExecutionActionResponseVO stop(String namespace, String executionName) {

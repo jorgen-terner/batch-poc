@@ -2,6 +2,7 @@ package infrastruktur.batch.service;
 
 import infrastruktur.batch.metrics.JobMetricsReporter;
 import infrastruktur.batch.model.ExecutionActionResponseVO;
+import infrastruktur.batch.model.ExecutionLogsResponseVO;
 import infrastruktur.batch.model.ExecutionStatusResponseVO;
 import infrastruktur.batch.model.JobParameterVO;
 import infrastruktur.batch.model.StartExecutionRequestVO;
@@ -178,6 +179,37 @@ class TemplateExecutionServiceTest {
             .thenThrow(new NoSuchElementException("Job not found: default/missing"));
 
         assertThrows(NoSuchElementException.class, () -> service.status(NS, "missing"));
+    }
+
+    // ─── logs ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void logsShouldReturnPodLogs() {
+        when(kubernetesJobGateway.requireJob(NS, EXEC)).thenReturn(jobWithTemplateLabel(EXEC, TEMPLATE));
+        when(kubernetesJobGateway.readExecutionLogs(NS, EXEC, 50))
+            .thenReturn(Map.of("pod-1", "line1\nline2\n"));
+
+        ExecutionLogsResponseVO response = service.logs(NS, EXEC, 50);
+
+        assertEquals(NS, response.namespace());
+        assertEquals(TEMPLATE, response.templateName());
+        assertEquals(EXEC, response.executionName());
+        assertEquals(50, response.tailLines());
+        assertEquals("line1\nline2\n", response.logsByPod().get("pod-1"));
+    }
+
+    @Test
+    void logsWithInvalidTailLinesShouldThrow() {
+        assertThrows(IllegalArgumentException.class, () -> service.logs(NS, EXEC, 0));
+        verify(kubernetesJobGateway, never()).requireJob(anyString(), anyString());
+    }
+
+    @Test
+    void logsWhenJobNotFoundShouldPropagate() {
+        when(kubernetesJobGateway.requireJob(NS, "missing"))
+            .thenThrow(new NoSuchElementException("Job not found: default/missing"));
+
+        assertThrows(NoSuchElementException.class, () -> service.logs(NS, "missing", null));
     }
 
     // ─── stop ──────────────────────────────────────────────────────────────────

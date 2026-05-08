@@ -3,15 +3,21 @@ package infrastruktur.batch.api;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import infrastruktur.batch.model.ExecutionActionResponseVO;
+import infrastruktur.batch.model.ExecutionLogsResponseVO;
 import infrastruktur.batch.model.ExecutionStatusResponseVO;
+import infrastruktur.batch.model.ExecutionStreamEventVO;
 import infrastruktur.batch.model.StartExecutionRequestVO;
 import infrastruktur.batch.service.TemplateExecutionService;
+import io.smallrye.mutiny.Multi;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.resteasy.reactive.RestSseElementType;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
@@ -68,6 +74,27 @@ public class TemplateExecutionResource {
     @Path("api/executions/{executionName}")
     public ExecutionStatusResponseVO status(@jakarta.ws.rs.PathParam("executionName") String executionName) {
         return templateExecutionService.status(namespace, executionName);
+    }
+
+    @GET
+    @Path("api/executions/{executionName}/logs")
+    public ExecutionLogsResponseVO logs(
+        @jakarta.ws.rs.PathParam("executionName") String executionName,
+        @QueryParam("tailLines") Integer tailLines
+    ) {
+        return templateExecutionService.logs(namespace, executionName, tailLines);
+    }
+
+    @GET
+    @Path("api/executions/{executionName}/stream")
+    @Produces(MediaType.SERVER_SENT_EVENTS)
+    @RestSseElementType(MediaType.APPLICATION_JSON)
+    public Multi<ExecutionStreamEventVO> stream(
+        @jakarta.ws.rs.PathParam("executionName") String executionName,
+        @QueryParam("intervalSeconds") @DefaultValue("3") int intervalSeconds
+        // intervalSeconds must be >= 1; validated in service, returns 400 if violated
+    ) {
+        return templateExecutionService.streamExecution(namespace, executionName, intervalSeconds);
     }
 
     @POST

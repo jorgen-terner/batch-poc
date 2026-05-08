@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Comparator;
 import java.util.Set;
 
 @ApplicationScoped
@@ -109,6 +110,27 @@ public class KubernetesJobGateway {
             activeCount = countActivePods(namespace, jobName);
         }
         return activeCount;
+    }
+
+    public Map<String, String> readExecutionLogs(String namespace, String jobName, Integer tailLines) {
+        var podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
+        Map<String, String> logsByPod = new LinkedHashMap<>();
+
+        podList.getItems().stream()
+            .filter(pod -> pod != null && pod.getMetadata() != null && pod.getMetadata().getName() != null)
+            .map(pod -> pod.getMetadata().getName())
+            .sorted(Comparator.naturalOrder())
+            .forEach(podName -> {
+                String logOutput;
+                if (tailLines != null) {
+                    logOutput = client.pods().inNamespace(namespace).withName(podName).tailingLines(tailLines).getLog();
+                } else {
+                    logOutput = client.pods().inNamespace(namespace).withName(podName).getLog();
+                }
+                logsByPod.put(podName, logOutput == null ? "" : logOutput);
+            });
+
+        return logsByPod;
     }
 
     public boolean hasIrrecoverablePodFailure(String namespace, String jobName) {

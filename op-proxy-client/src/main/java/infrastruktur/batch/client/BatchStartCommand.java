@@ -1,0 +1,297 @@
+package infrastruktur.batch.client;
+
+import infrastruktur.batch.client.model.ExecutionActionResponseVO;
+import infrastruktur.batch.client.model.ExecutionLogsResponseVO;
+import infrastruktur.batch.client.model.ExecutionStatusResponseVO;
+import infrastruktur.batch.client.model.JobParameterVO;
+import infrastruktur.batch.client.model.StartExecutionRequestVO;
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicReference;
+
+/**
+ * Java-klient för op-proxy-app — motsvarar start-batch.sh fast med SSE-stöd.
+ *
+ * <p>Exit-koder:
+ * <ul>
+ *   <li>0   – SUCCEEDED / STOPPED</li>
+ *   <li>2   – FAILED</li>
+ *   <li>3   – SUSPENDED</li>
+ *   <li>4   – UNKNOWN eller oväntat läge</li>
+ *   <li>10  – Aktiv (internt, returneras ej till anroparen)</li>
+ *   <li>124 – Timeout i watch-läge</li>
+ *   <li>130 – Avbruten (SIGINT)</li>
+ *   <li>1   – Konfigurationsfel eller nätverksfel</li>
+ * </ul>
+ */
+@Command(
+    name = "batch-start",
+    mixinStandardHelpOptions = true,
+    description = "Starta en execution via op-proxy-app och vänta på resultat. " +
+                  "Stödjer polling (default) och SSE-streaming (--sse)."
+)
+public class BatchStartCommand implements Callable<Integer> {
+
+    @Parameters(index = "0", description = "Template-namn")
+    private String templateName;
+
+    @Option(
+        names = {"--base-url"},
+        defaultValue = "${OP_PROXY_BASE_URL:-http://localhost:8080}",
+        description = "Bas-URL till op-proxy-app (default: $${OP_PROXY_BASE_URL:-http://localhost:8080})"
+    )
+    private String baseUrl;
+
+    @Option(names = {"--client-request-id"}, description = "Valfritt clientRequestId")
+    private String clientRequestId;
+
+    @Option(names = {"--timeout-seconds"}, description = "Valfritt activeDeadlineSeconds till körningen")
+    private Long timeoutSeconds;
+
+    @Option(
+        names = {"-p", "--parameter"},
+        description = "Template-parameter som NAME=VALUE (kan anges flera gånger)"
+    )
+    private List<String> parameters = new ArrayList<>();
+
+    @Option(
+        names = {"--interval-seconds"},
+        defaultValue = "5",
+        description = "Poll-/stream-intervall i sekunder (default: 5, min: 1)"
+    )
+    private int intervalSeconds;
+
+    @Option(
+        names = {"--watch-timeout-seconds"},
+        defaultValue = "3600",
+        description = "Max tid att vaka i sekunder (default: 3600, 0 = ingen timeout)"
+    )
+    private long watchTimeoutSeconds;
+
+    @Option(names = {"--sse"}, description = "Använd SSE-streaming istället för polling")
+    private boolean sse;
+
+    @Option(names = {"--show-logs"}, description = "Skriv ut pod-loggar när körningen avslutas (polling-läge)")
+    private boolean showLogs;
+
+    @Option(names = {"--logs-tail-lines"}, description = "Max antal logg-rader per pod (default: alla)")
+    private Integer logsTailLines;
+
+    public static void main(String[] args) {
+        System.exit(new CommandLine(new BatchStartCommand()).execute(args));
+    }
+
+    @Override
+    public Integer call() {
+        if (intervalSeconds < 1) {
+            System.err.println("ERROR: --interval-seconds måste vara >= 1");
+            return 1;
+        }
+        if (logsTailLines != null && logsTailLines < 1) {
+            System.err.println("ERROR: --logs-tail-lines måste vara >= 1");
+            return 1;
+        }
+
+        List<JobParameterVO> jobParams = parseParameters();
+        if (jobParams == null) {
+            return 1; // fel loggat i parseParameters
+        }
+
+        // Håller execution-namn för shutdown hook – null = klar, ingen stop nödvändig.
+        AtomicReference<String> executionNameRef = new AtomicReference<>();
+
+        Thread stopHook = buildStopHook(executionNameRef);
+        Runtime.getRuntime().addShutdownHook(stopHook);
+
+        try (OpProxyApiClient client = new OpProxyApiClient(baseUrl)) {
+
+            ExecutionActionResponseVO started = client.start(
+                templateName,
+                new StartExecutionRequestVO(
+                    blankToNull(clientRequestId),
+                    timeoutSeconds,
+                    jobParams.isEmpty() ? null : jobParams
+                )
+            );
+
+            String executionName = started.executionName();
+            if (executionName == null || executionName.isBlank()) {
+                System.err.println("ERROR: start-svaret saknar executionName");
+                return 1;
+            }
+
+            executionNameRef.set(executionName);
+            System.out.println("Körning startad: " + executionName);
+
+            int result = sse
+                ? watchViaSse(client, executionName)
+                : watchViaPolling(client, executionName);
+
+            // Normal avslut – nollställ så att shutdown hook inte skickar stop.
+            executionNameRef.set(null);
+            tryRemoveShutdownHook(stopHook);
+
+            if (showLogs && !sse) {
+                printLogs(client, executionName);
+            }
+
+            return result;
+
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return 130;
+        } catch (ApiException ex) {
+            System.err.println("ERROR: " + ex.getMessage());
+            return 1;
+        } catch (Exception ex) {
+            System.err.println("ERROR: " + ex.getMessage());
+            return 1;
+        }
+    }
+
+    // ─── watch: polling ────────────────────────────────────────────────────────
+
+    private int watchViaPolling(OpProxyApiClient client, String executionName)
+            throws Exception {
+        Instant started = Instant.now();
+        while (true) {
+            ExecutionStatusResponseVO status = client.status(executionName);
+            System.out.printf("Status: fas=%s executionName=%s%n", status.phase(), executionName);
+
+            int code = phaseToExitCode(status.phase());
+            if (code != 10) {
+                return code;
+            }
+
+            if (watchTimeoutSeconds > 0) {
+                long elapsed = Duration.between(started, Instant.now()).toSeconds();
+                if (elapsed >= watchTimeoutSeconds) {
+                    System.err.printf("Timeout efter %ds (senaste fas=%s)%n",
+                        watchTimeoutSeconds, status.phase());
+                    return 124;
+                }
+            }
+
+            Thread.sleep(intervalSeconds * 1000L);
+        }
+    }
+
+    // ─── watch: SSE ────────────────────────────────────────────────────────────
+
+    private int watchViaSse(OpProxyApiClient client, String executionName)
+            throws Exception {
+        // exitCode[0] used as mutable int inside lambda
+        int[] exitCode = {4};
+
+        client.stream(executionName, intervalSeconds, event -> {
+            switch (event.type()) {
+                case "status" -> System.out.printf(
+                    "Status: fas=%s (active=%d succeeded=%d failed=%d)%n",
+                    event.phase(),
+                    orZero(event.activePods()),
+                    orZero(event.succeededPods()),
+                    orZero(event.failedPods()));
+                case "log" -> {
+                    System.out.printf("--- Logg: %s ---%n", event.pod());
+                    if (event.output() != null) {
+                        System.out.println(event.output());
+                    }
+                }
+                case "done" -> {
+                    System.out.printf("Klar: fas=%s exitCode=%d%n",
+                        event.phase(), orZero(event.exitCode()));
+                    exitCode[0] = orZero(event.exitCode());
+                }
+                default -> { /* okänd event-typ – ignorera */ }
+            }
+        });
+
+        return exitCode[0];
+    }
+
+    // ─── loggar (polling-läge) ─────────────────────────────────────────────────
+
+    private void printLogs(OpProxyApiClient client, String executionName) {
+        System.out.printf("--- Loggar för körning %s ---%n", executionName);
+        try {
+            ExecutionLogsResponseVO logs = client.logs(executionName, logsTailLines);
+            if (logs.logsByPod() != null) {
+                for (Map.Entry<String, String> entry : logs.logsByPod().entrySet()) {
+                    System.out.printf("[%s]%n%s%n", entry.getKey(), entry.getValue());
+                }
+            }
+        } catch (Exception ex) {
+            System.err.println("Varning: kunde inte hämta loggar: " + ex.getMessage());
+        }
+        System.out.println("--- Slut loggar ---");
+    }
+
+    // ─── shutdown hook ─────────────────────────────────────────────────────────
+
+    private Thread buildStopHook(AtomicReference<String> executionNameRef) {
+        return new Thread(() -> {
+            String name = executionNameRef.getAndSet(null);
+            if (name == null) {
+                return;
+            }
+            System.err.println("\nAvbruten – skickar stop för körning " + name + " …");
+            try (OpProxyApiClient hookClient = new OpProxyApiClient(baseUrl)) {
+                hookClient.stop(name);
+                System.err.println("Stop-anrop skickat.");
+            } catch (Exception ex) {
+                System.err.println("Varning: stop-anrop misslyckades: " + ex.getMessage());
+            }
+        }, "stop-shutdown-hook");
+    }
+
+    private static void tryRemoveShutdownHook(Thread hook) {
+        try {
+            Runtime.getRuntime().removeShutdownHook(hook);
+        } catch (IllegalStateException ignored) {
+            // JVM already shutting down – hook will run but executionNameRef is null → no-op
+        }
+    }
+
+    // ─── helpers ───────────────────────────────────────────────────────────────
+
+    private List<JobParameterVO> parseParameters() {
+        List<JobParameterVO> result = new ArrayList<>();
+        for (String p : parameters) {
+            int idx = p.indexOf('=');
+            if (idx <= 0) {
+                System.err.println("ERROR: --parameter måste vara NAME=VALUE, fick: " + p);
+                return null;
+            }
+            result.add(new JobParameterVO(p.substring(0, idx).trim(), p.substring(idx + 1)));
+        }
+        return result;
+    }
+
+    private static int phaseToExitCode(String phase) {
+        if (phase == null) return 4;
+        return switch (phase.toUpperCase(java.util.Locale.ROOT)) {
+            case "SUCCEEDED", "STOPPED", "CANCELLED" -> 0;
+            case "RUNNING", "PENDING" -> 10;
+            case "FAILED" -> 2;
+            case "SUSPENDED" -> 3;
+            default -> 4;
+        };
+    }
+
+    private static int orZero(Integer v) {
+        return v == null ? 0 : v;
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s;
+    }
+}

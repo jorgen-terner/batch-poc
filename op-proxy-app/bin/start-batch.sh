@@ -16,6 +16,8 @@ Flaggor:
   --parameter KEY=VALUE        Template-parameter (kan anges flera gånger)
   --interval-seconds N         Poll-intervall för status (default: 5)
   --watch-timeout-seconds N    Max tid att vaka innan timeout (default: 3600, 0 = ingen timeout)
+  --show-logs                  Skriv ut stdout-loggar från körningens poddar när den avslutas
+  --logs-tail-lines N          Antal logg-rader att hämta per pod (default: alla rader)
   --insecure                   Tillåt osäkert TLS-certifikat (curl -k)
   --help                       Visa hjälp
 
@@ -116,6 +118,8 @@ INTERVAL_SECONDS=5
 WATCH_TIMEOUT_SECONDS=3600
 INSECURE_TLS=false
 PARAMETERS_JSON='[]'
+SHOW_LOGS=false
+LOGS_TAIL_LINES=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -171,6 +175,15 @@ while [ $# -gt 0 ]; do
       WATCH_TIMEOUT_SECONDS="$2"
       shift 2
       ;;
+    --show-logs)
+      SHOW_LOGS=true
+      shift
+      ;;
+    --logs-tail-lines)
+      [ $# -ge 2 ] || die "--logs-tail-lines kräver ett värde"
+      LOGS_TAIL_LINES="$2"
+      shift 2
+      ;;
     --insecure)
       INSECURE_TLS=true
       shift
@@ -190,6 +203,9 @@ is_non_negative_int "$INTERVAL_SECONDS" || die "--interval-seconds måste vara e
 is_non_negative_int "$WATCH_TIMEOUT_SECONDS" || die "--watch-timeout-seconds måste vara ett heltal >= 0"
 if [ -n "$START_TIMEOUT_SECONDS" ]; then
   is_non_negative_int "$START_TIMEOUT_SECONDS" || die "--timeout-seconds måste vara ett heltal >= 0"
+fi
+if [ -n "$LOGS_TAIL_LINES" ]; then
+  is_non_negative_int "$LOGS_TAIL_LINES" && [ "$LOGS_TAIL_LINES" -ge 1 ] || die "--logs-tail-lines måste vara ett heltal >= 1"
 fi
 
 require_cmd curl
@@ -251,6 +267,21 @@ while true; do
 
   case "$exit_code" in
     0|2|3|4)
+      if [ "$SHOW_LOGS" = "true" ]; then
+        logs_url="$BASE_URL/api/executions/$execution_name/logs"
+        if [ -n "$LOGS_TAIL_LINES" ]; then
+          logs_url="${logs_url}?tailLines=${LOGS_TAIL_LINES}"
+        fi
+        echo "--- Loggar för körning $execution_name ---"
+        logs_response="$(curl ${INSECURE_TLS:+"-k"} --silent --show-error \
+          --request GET \
+          --header "Accept: application/json" \
+          "$logs_url" 2>&1)" \
+          && printf '%s' "$logs_response" \
+            | jq -r '.logsByPod | to_entries[] | "[\(.key)]\n\(.value)"' \
+          || echo "Varning: kunde inte hämta loggar från $logs_url" >&2
+        echo "--- Slut loggar ---"
+      fi
       exit "$exit_code"
       ;;
   esac

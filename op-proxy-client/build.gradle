@@ -1,0 +1,34 @@
+plugins {
+    id 'java'
+}
+
+group = 'infrastruktur.batch'
+version = '0.1.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+dependencies {
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.17.2'
+    implementation 'info.picocli:picocli:4.7.6'
+}
+
+jar {
+    archiveBaseName = 'op-proxy-client'
+    manifest {
+        attributes 'Main-Class': 'infrastruktur.batch.client.BatchStartCommand'
+    }
+    // Fat JAR – alla runtime-beroenden paketeras i en enda jar
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
