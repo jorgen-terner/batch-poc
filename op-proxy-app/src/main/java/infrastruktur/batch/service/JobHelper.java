@@ -29,7 +29,7 @@ final class JobHelper {
         try {
             return Instant.parse(value);
         } catch (DateTimeParseException ex) {
-            LOG.warn("Failed to parse timestamp from Kubernetes status: {}", value);
+            LOG.warn("Kunde inte tolka tidsstämpel från Kubernetes-status: {}", value);
             return null;
         }
     }
@@ -44,7 +44,7 @@ final class JobHelper {
 
     static void validateTimeoutSeconds(Long timeoutSeconds) {
         if (timeoutSeconds != null && timeoutSeconds < 1) {
-            throw new IllegalArgumentException("timeoutSeconds must be >= 1 when provided");
+            throw new IllegalArgumentException("timeoutSeconds måste vara >= 1 när värdet anges");
         }
     }
 
@@ -59,19 +59,19 @@ final class JobHelper {
         for (int i = 0; i < parameters.size(); i++) {
             JobParameterVO parameter = parameters.get(i);
             if (parameter == null) {
-                throw new IllegalArgumentException("parameters[" + i + "] must not be null");
+                throw new IllegalArgumentException("parameters[" + i + "] får inte vara null");
             }
             String rawName = parameter.name();
             String rawValue = parameter.value();
             if (rawName == null || rawName.isBlank()) {
-                throw new IllegalArgumentException("parameters[" + i + "].name must not be blank");
+                throw new IllegalArgumentException("parameters[" + i + "].name får inte vara tomt");
             }
             if (rawValue == null) {
-                throw new IllegalArgumentException("parameters[" + i + "].value must not be null");
+                throw new IllegalArgumentException("parameters[" + i + "].value får inte vara null");
             }
             String name = rawName.trim();
             if (!duplicateGuard.add(name)) {
-                throw new IllegalArgumentException("Duplicate parameter name: " + name);
+                throw new IllegalArgumentException("Dubblett av parameternamn: " + name);
             }
             normalized.put(name, rawValue);
         }

@@ -45,10 +45,10 @@ public class TemplateExecutionService {
         this.jobPhaseResolver = jobPhaseResolver;
         this.jobMetricsReporter = jobMetricsReporter;
         if (stopGracefulPollIntervalMillis < 1) {
-            throw new IllegalArgumentException("batch.execution.stop.graceful.poll-interval-millis must be >= 1");
+            throw new IllegalArgumentException("batch.execution.stop.graceful.poll-interval-millis måste vara >= 1");
         }
         if (stopGracefulMaxAttempts < 1) {
-            throw new IllegalArgumentException("batch.execution.stop.graceful.max-attempts must be >= 1");
+            throw new IllegalArgumentException("batch.execution.stop.graceful.max-attempts måste vara >= 1");
         }
         this.stopGracefulPollIntervalMillis = stopGracefulPollIntervalMillis;
         this.stopGracefulMaxAttempts = stopGracefulMaxAttempts;
@@ -79,9 +79,9 @@ public class TemplateExecutionService {
         Job createdExecution = kubernetesJobGateway.createExecutionFromTemplate(namespace, templateName, timeoutSeconds, parameters);
         String executionName = createdExecution.getMetadata() != null ? createdExecution.getMetadata().getName() : null;
         if (executionName == null || executionName.isBlank()) {
-            throw new IllegalStateException("Created execution is missing metadata.name");
+            throw new IllegalStateException("Skapad körning saknar metadata.name");
         }
-        LOG.info("Started execution {}/{} from template {} (timeoutSeconds={}, parameters={})",
+        LOG.info("Startade körning {}/{} från template {} (timeoutSeconds={}, parametrar={})",
             namespace,
             executionName,
             templateName,
@@ -95,7 +95,7 @@ public class TemplateExecutionService {
             clientRequestId,
             "start",
             "PENDING",
-            "Execution started",
+            "Körning startad",
             Instant.now()
         );
         reportExecutionAction(namespace, templateName, executionName, response, Map.of());
@@ -136,7 +136,7 @@ public class TemplateExecutionService {
 
     public ExecutionLogsResponseVO logs(String namespace, String executionName, Integer tailLines) {
         if (tailLines != null && tailLines < 1) {
-            throw new IllegalArgumentException("tailLines must be >= 1");
+            throw new IllegalArgumentException("tailLines måste vara >= 1");
         }
 
         Job executionJob = kubernetesJobGateway.requireJob(namespace, executionName);
@@ -156,7 +156,7 @@ public class TemplateExecutionService {
      */
     public Multi<ExecutionStreamEventVO> streamExecution(String namespace, String executionName, int intervalSeconds) {
         if (intervalSeconds < 1) {
-            throw new IllegalArgumentException("intervalSeconds must be >= 1");
+            throw new IllegalArgumentException("intervalSeconds måste vara >= 1");
         }
         // Fail-fast: verify the job exists before opening the SSE stream.
         // The job may disappear later during the loop; that is handled gracefully below.
@@ -170,7 +170,7 @@ public class TemplateExecutionService {
                     try {
                         s = status(namespace, executionName);
                     } catch (KubernetesClientException ex) {
-                        LOG.warn("Transient Kubernetes error while streaming {}/{}, will retry: {}",
+                        LOG.warn("Tillfälligt Kubernetes-fel under strömning av {}/{}, försöker igen: {}",
                             namespace, executionName, ex.getMessage());
                         Thread.sleep(pollMillis);
                         continue;
@@ -222,7 +222,7 @@ public class TemplateExecutionService {
         try {
             kubernetesJobGateway.patchSuspend(namespace, executionName, true);
         } catch (KubernetesClientException ex) {
-            LOG.warn("Could not suspend execution {}/{} before stop: {}", namespace, executionName, ex.getMessage());
+            LOG.warn("Kunde inte pausa körning {}/{} före stopp: {}", namespace, executionName, ex.getMessage());
         }
 
         int remainingActivePods = kubernetesJobGateway.waitForActivePodsToStop(
@@ -235,7 +235,7 @@ public class TemplateExecutionService {
         if (remainingActivePods > 0) {
             int deletedActivePods = kubernetesJobGateway.deleteActivePods(namespace, executionName);
             LOG.warn(
-                "Graceful stop timeout for execution {}/{} ({} active pod(s) remaining). Forced deletion removed {} active pod(s)",
+                "Tidsgräns för graceful stop nåddes för körning {}/{} ({} aktiv(a) podd(ar) kvar). Tvingad radering tog bort {} aktiv(a) podd(ar)",
                 namespace,
                 executionName,
                 remainingActivePods,
@@ -245,7 +245,7 @@ public class TemplateExecutionService {
 
         kubernetesJobGateway.deleteJob(namespace, executionName);
         LOG.info(
-            "Stopped execution {}/{} (graceful stop), execution job deleted",
+            "Stoppade körning {}/{} (graceful stop), körningsjobb raderat",
             namespace,
             executionName
         );
@@ -255,7 +255,7 @@ public class TemplateExecutionService {
             executionName,
             "stop",
             "STOPPED",
-            "Execution stopped (graceful stop), execution job deleted"
+            "Körning stoppad (graceful stop), körningsjobb raderat"
         );
         reportExecutionAction(namespace, response.templateName(), executionName, response, Map.of());
         return response;
@@ -304,13 +304,13 @@ public class TemplateExecutionService {
     private String resolveTemplateName(Job executionJob) {
         var meta = executionJob.getMetadata();
         if (meta == null || meta.getLabels() == null) {
-            LOG.warn("Execution {} is missing metadata or labels - cannot resolve template name",
+            LOG.warn("Körning {} saknar metadata eller labels - kan inte avgöra template name",
                 meta != null ? meta.getName() : "<unknown>");
             return "UNKNOWN";
         }
         String labelValue = meta.getLabels().get(KubernetesJobGateway.TEMPLATE_NAME_LABEL);
         if (labelValue == null || labelValue.isBlank()) {
-            LOG.warn("Execution {} is missing label '{}' - cannot resolve template name",
+            LOG.warn("Körning {} saknar label '{}' - kan inte avgöra template name",
                 meta.getName(), KubernetesJobGateway.TEMPLATE_NAME_LABEL);
             return "UNKNOWN";
         }
@@ -319,7 +319,7 @@ public class TemplateExecutionService {
 
     private void validateTemplateName(String templateName) {
         if (templateName == null || templateName.isBlank()) {
-            throw new IllegalArgumentException("templateName must be provided");
+            throw new IllegalArgumentException("templateName måste anges");
         }
     }
 

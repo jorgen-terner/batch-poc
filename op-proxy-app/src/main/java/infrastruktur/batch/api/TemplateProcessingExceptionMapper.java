@@ -20,12 +20,12 @@ public class TemplateProcessingExceptionMapper implements ExceptionMapper<Templa
 
     @Override
     public Response toResponse(TemplateProcessingException exception) {
-        LOG.warn("Template processing failed: {}", exception.getMessage());
-        String message = exception.getMessage() != null ? exception.getMessage() : "Template processing failed";
+        LOG.warn("Template processing misslyckades: {}", exception.getMessage());
+        String message = exception.getMessage() != null ? exception.getMessage() : "Template processing misslyckades";
         return Response.status(422)
             .type(MediaType.APPLICATION_JSON)
             .entity(Map.of(
-                "error", "Template processing failed",
+                "error", "Template processing misslyckades",
                 "code", "TEMPLATE_PROCESSING_ERROR",
                 "message", message
             ))

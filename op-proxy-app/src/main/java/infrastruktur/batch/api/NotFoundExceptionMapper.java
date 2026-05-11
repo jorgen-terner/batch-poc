@@ -20,12 +20,12 @@ public class NotFoundExceptionMapper implements ExceptionMapper<NoSuchElementExc
 
     @Override
     public Response toResponse(NoSuchElementException exception) {
-        LOG.info("Requested resource was not found: {}", exception.getMessage());
-        String message = exception.getMessage() != null ? exception.getMessage() : "Resource not found";
+        LOG.info("Efterfrågad resurs hittades inte: {}", exception.getMessage());
+        String message = exception.getMessage() != null ? exception.getMessage() : "Resursen hittades inte";
         return Response.status(Response.Status.NOT_FOUND)
             .type(MediaType.APPLICATION_JSON)
             .entity(Map.of(
-                "error", "Resource not found",
+                "error", "Resursen hittades inte",
                 "code", "NOT_FOUND",
                 "message", message
             ))

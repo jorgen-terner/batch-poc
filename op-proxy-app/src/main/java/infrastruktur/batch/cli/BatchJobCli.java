@@ -29,7 +29,7 @@ import java.util.concurrent.Callable;
 @Command(
     name = "batch-job",
     mixinStandardHelpOptions = true,
-    description = "CLI for controlling template-based executions",
+    description = "CLI för att styra templatebaserade körningar",
     subcommands = {
         BatchJobCli.StartExecutionCommand.class,
         BatchJobCli.ExecutionStatusCommand.class,
@@ -39,7 +39,7 @@ import java.util.concurrent.Callable;
 public final class BatchJobCli implements Runnable {
     private static final Logger LOG = LoggerFactory.getLogger(BatchJobCli.class);
 
-    @Option(names = {"-n", "--namespace"}, defaultValue = "default", description = "Kubernetes namespace")
+    @Option(names = {"-n", "--namespace"}, defaultValue = "default", description = "Kubernetes-namespace")
     String namespace;
 
     @FunctionalInterface
@@ -88,8 +88,8 @@ public final class BatchJobCli implements Runnable {
             String json = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(payload);
             cli().getOut().println(json);
         } catch (JsonProcessingException ex) {
-            LOG.error("Failed to serialize CLI output payload", ex);
-            throw new IllegalStateException("Failed to serialize CLI output", ex);
+            LOG.error("Kunde inte serialisera CLI-utdata", ex);
+            throw new IllegalStateException("Kunde inte serialisera CLI-utdata", ex);
         }
     }
 
@@ -101,8 +101,8 @@ public final class BatchJobCli implements Runnable {
                 if (message == null || message.isBlank()) {
                     message = ex.getClass().getSimpleName();
                 }
-                cmd.getErr().println("Error: " + message);
-                LOG.debug("CLI command failed", ex);
+                cmd.getErr().println("Fel: " + message);
+                LOG.debug("CLI-kommando misslyckades", ex);
                 return cmd.getCommandSpec().exitCodeOnExecutionException();
             });
         }
@@ -123,18 +123,18 @@ public final class BatchJobCli implements Runnable {
         List<JobParameterVO> result = new ArrayList<>();
         for (String entry : entries) {
             if (entry == null || entry.isBlank()) {
-                throw new IllegalArgumentException("--parameter expects name=value");
+                throw new IllegalArgumentException("--parameter förväntar name=value");
             }
 
             int separatorIndex = entry.indexOf('=');
             if (separatorIndex <= 0) {
-                throw new IllegalArgumentException("--parameter expects name=value, got: " + entry);
+                throw new IllegalArgumentException("--parameter förväntar name=value, fick: " + entry);
             }
 
             String name = entry.substring(0, separatorIndex).trim();
             String value = entry.substring(separatorIndex + 1);
             if (name.isBlank()) {
-                throw new IllegalArgumentException("--parameter name must not be blank");
+                throw new IllegalArgumentException("--parameter-namn får inte vara tomt");
             }
 
             result.add(new JobParameterVO(name, value));
@@ -142,21 +142,21 @@ public final class BatchJobCli implements Runnable {
         return result;
     }
 
-    @Command(name = "start-execution", description = "Start an execution from a template")
+    @Command(name = "start-execution", description = "Starta en körning från en template")
     static final class StartExecutionCommand implements Callable<Integer> {
         @CommandLine.ParentCommand
         private BatchJobCli parent;
 
-        @Parameters(index = "0", description = "OpenShift Template resource name")
+        @Parameters(index = "0", description = "Namn på OpenShift Template-resurs")
         private String templateName;
 
-        @Option(names = {"--client-request-id"}, description = "Optional client correlation id")
+        @Option(names = {"--client-request-id"}, description = "Valfritt korrelations-id från klient")
         private String clientRequestId;
 
-        @Option(names = {"--timeout-seconds"}, description = "Optional max runtime (activeDeadlineSeconds)")
+        @Option(names = {"--timeout-seconds"}, description = "Valfri maxkörtid (activeDeadlineSeconds)")
         private Long timeoutSeconds;
 
-        @Option(names = {"-p", "--parameter"}, description = "Template parameter as name=value (repeat option for multiple values)")
+        @Option(names = {"-p", "--parameter"}, description = "Template-parameter som name=value (upprepa flaggan för flera värden)")
         private List<String> parameters;
 
         @Override
@@ -173,21 +173,21 @@ public final class BatchJobCli implements Runnable {
         }
     }
 
-    @Command(name = "execution-status", description = "Get execution status (optionally watch until terminal state)")
+    @Command(name = "execution-status", description = "Hämta körningsstatus (kan bevakas till terminalt läge)")
     static final class ExecutionStatusCommand implements Callable<Integer> {
         @CommandLine.ParentCommand
         private BatchJobCli parent;
 
-        @Parameters(index = "0", description = "Execution name")
+        @Parameters(index = "0", description = "Körningsnamn")
         private String executionName;
 
-        @Option(names = {"-w", "--watch"}, description = "Poll status until SUCCEEDED or FAILED")
+        @Option(names = {"-w", "--watch"}, description = "Polla status tills SUCCEEDED eller FAILED")
         private boolean watch;
 
-        @Option(names = {"--interval-seconds"}, defaultValue = "5", description = "Polling interval when --watch is enabled")
+        @Option(names = {"--interval-seconds"}, defaultValue = "5", description = "Pollningsintervall när --watch är aktiverat")
         private long intervalSeconds;
 
-        @Option(names = {"--timeout-seconds"}, description = "Optional timeout for watch mode")
+        @Option(names = {"--timeout-seconds"}, description = "Valfri timeout för watch-läge")
         private Long timeoutSeconds;
 
         @Override
@@ -200,7 +200,7 @@ public final class BatchJobCli implements Runnable {
                 }
 
                 if (intervalSeconds < 1) {
-                    throw new IllegalArgumentException("--interval-seconds must be >= 1");
+                    throw new IllegalArgumentException("--interval-seconds måste vara >= 1");
                 }
 
                 Instant started = Instant.now();
@@ -226,12 +226,12 @@ public final class BatchJobCli implements Runnable {
         }
     }
 
-    @Command(name = "stop-execution", description = "Stop an execution")
+    @Command(name = "stop-execution", description = "Stoppa en körning")
     static final class StopExecutionCommand implements Callable<Integer> {
         @CommandLine.ParentCommand
         private BatchJobCli parent;
 
-        @Parameters(index = "0", description = "Execution name")
+        @Parameters(index = "0", description = "Körningsnamn")
         private String executionName;
 
         @Override
@@ -278,13 +278,13 @@ public final class BatchJobCli implements Runnable {
     private int handleNotFound(NoSuchElementException exception) {
         String reason = exception.getMessage();
         if (reason == null || reason.isBlank()) {
-            reason = "Resource not found";
+            reason = "Resursen hittades inte";
         }
 
         String normalizedReason = reason.endsWith(".") ? reason.substring(0, reason.length() - 1) : reason;
 
         cli().getErr().println(normalizedReason + ".");
-        cli().getErr().println("Possible causes: wrong namespace/name, resource stopped, deleted or removed after ttlSecondsAfterFinished.");
+        cli().getErr().println("Möjliga orsaker: fel namespace/namn, resursen är stoppad, raderad eller borttagen efter ttlSecondsAfterFinished.");
         return 4;
     }
 
@@ -293,7 +293,7 @@ public final class BatchJobCli implements Runnable {
             Thread.sleep(millis);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while waiting in watch mode", ex);
+            throw new IllegalStateException("Avbruten under väntan i watch-läge", ex);
         }
     }
 }

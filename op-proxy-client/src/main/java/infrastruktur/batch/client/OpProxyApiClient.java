@@ -18,10 +18,10 @@ import java.time.Duration;
 import java.util.function.Consumer;
 
 /**
- * HTTP client for op-proxy-app. Uses java.net.http.HttpClient (no external deps).
+ * HTTP-klient för op-proxy-app. Använder java.net.http.HttpClient (inga externa beroenden).
  *
- * <p>SSE streaming: reads {@code text/event-stream} line-by-line and calls onEvent per event.
- * Blocks until the server closes the stream (i.e. a {@code done} event is received).
+ * <p>SSE-strömning: läser {@code text/event-stream} rad för rad och anropar onEvent per händelse.
+ * Blockerar tills servern stänger strömmen (dvs. när en {@code done}-händelse tas emot).
  */
 public class OpProxyApiClient implements AutoCloseable {
 
@@ -86,12 +86,12 @@ public class OpProxyApiClient implements AutoCloseable {
     }
 
     /**
-     * Opens an SSE stream to {@code /api/executions/{name}/stream} and calls
-     * {@code onEvent} for each received event. Blocks until the server closes
-     * the stream or the thread is interrupted.
+     * Öppnar en SSE-ström till {@code /api/executions/{name}/stream} och anropar
+     * {@code onEvent} för varje mottagen händelse. Blockerar tills servern stänger
+     * strömmen eller tråden avbryts.
      *
-     * <p>SSE format (RFC): one or more {@code data: <json>} lines per event,
-     * events separated by blank lines. Other fields (event:, id:, retry:) are ignored.
+     * <p>SSE-format (RFC): en eller flera rader av typen {@code data: <json>} per händelse,
+     * händelser separeras med tomrader. Övriga fält (event:, id:, retry:) ignoreras.
      */
     public void stream(String executionName, int intervalSeconds, Consumer<ExecutionStreamEventVO> onEvent)
             throws IOException, InterruptedException {
@@ -107,7 +107,7 @@ public class OpProxyApiClient implements AutoCloseable {
 
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             throw new ApiException(response.statusCode(),
-                "SSE stream request failed for execution: " + executionName);
+                "SSE-strömningsbegäran misslyckades för körning: " + executionName);
         }
 
         StringBuilder dataBuffer = new StringBuilder();
@@ -123,13 +123,13 @@ public class OpProxyApiClient implements AutoCloseable {
                         dataBuffer.append(data);
                     }
                 } else if (line.isBlank() && dataBuffer.length() > 0) {
-                    // Blank line = end of one SSE event
+                    // Tomrad = slutet på en SSE-händelse
                     ExecutionStreamEventVO event =
                         mapper.readValue(dataBuffer.toString(), ExecutionStreamEventVO.class);
                     dataBuffer.setLength(0);
                     onEvent.accept(event);
                 }
-                // Other SSE fields (event:, id:, retry:) are intentionally ignored
+                // Övriga SSE-fält (event:, id:, retry:) ignoreras avsiktligt
             }
         }
     }
@@ -144,12 +144,12 @@ public class OpProxyApiClient implements AutoCloseable {
     }
 
     /**
-     * Tries to extract {@code message} from a JSON error body.
-     * Falls back to raw body text if parsing fails.
+     * Försöker extrahera {@code message} från en JSON-felkropp.
+     * Faller tillbaka till råtext om parsning misslyckas.
      */
     private String extractErrorMessage(String body) {
         if (body == null || body.isBlank()) {
-            return "empty response body";
+            return "tom svarskropp";
         }
         try {
             var node = mapper.readTree(body);
@@ -162,6 +162,6 @@ public class OpProxyApiClient implements AutoCloseable {
 
     @Override
     public void close() {
-        http.close(); // HttpClient is AutoCloseable since Java 21
+        http.close(); // HttpClient är AutoCloseable sedan Java 21
     }
 }

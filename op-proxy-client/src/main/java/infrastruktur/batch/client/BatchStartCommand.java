@@ -36,8 +36,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @Command(
     name = "batch-start",
     mixinStandardHelpOptions = true,
-    description = "Starta en execution via op-proxy-app och vänta på resultat. " +
-                  "Stödjer polling (default) och SSE-streaming (--sse)."
+    description = "Starta en körning via op-proxy-app och vänta på resultat. " +
+                  "Stödjer polling (standard) och SSE-strömning (--sse)."
 )
 public class BatchStartCommand implements Callable<Integer> {
 
@@ -47,7 +47,7 @@ public class BatchStartCommand implements Callable<Integer> {
     @Option(
         names = {"--base-url"},
         defaultValue = "${OP_PROXY_BASE_URL:-http://localhost:8080}",
-        description = "Bas-URL till op-proxy-app (default: $${OP_PROXY_BASE_URL:-http://localhost:8080})"
+        description = "Bas-URL till op-proxy-app (standard: $${OP_PROXY_BASE_URL:-http://localhost:8080})"
     )
     private String baseUrl;
 
@@ -66,24 +66,24 @@ public class BatchStartCommand implements Callable<Integer> {
     @Option(
         names = {"--interval-seconds"},
         defaultValue = "5",
-        description = "Poll-/stream-intervall i sekunder (default: 5, min: 1)"
+        description = "Poll-/strömningsintervall i sekunder (standard: 5, min: 1)"
     )
     private int intervalSeconds;
 
     @Option(
         names = {"--watch-timeout-seconds"},
         defaultValue = "3600",
-        description = "Max tid att vaka i sekunder (default: 3600, 0 = ingen timeout)"
+        description = "Max tid att vaka i sekunder (standard: 3600, 0 = ingen timeout)"
     )
     private long watchTimeoutSeconds;
 
-    @Option(names = {"--sse"}, description = "Använd SSE-streaming istället för polling")
+    @Option(names = {"--sse"}, description = "Använd SSE-strömning i stället för polling")
     private boolean sse;
 
     @Option(names = {"--show-logs"}, description = "Skriv ut pod-loggar när körningen avslutas (polling-läge)")
     private boolean showLogs;
 
-    @Option(names = {"--logs-tail-lines"}, description = "Max antal logg-rader per pod (default: alla)")
+    @Option(names = {"--logs-tail-lines"}, description = "Max antal loggrader per pod (standard: alla)")
     private Integer logsTailLines;
 
     public static void main(String[] args) {
@@ -93,11 +93,11 @@ public class BatchStartCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         if (intervalSeconds < 1) {
-            System.err.println("ERROR: --interval-seconds måste vara >= 1");
+            System.err.println("FEL: --interval-seconds måste vara >= 1");
             return 1;
         }
         if (logsTailLines != null && logsTailLines < 1) {
-            System.err.println("ERROR: --logs-tail-lines måste vara >= 1");
+            System.err.println("FEL: --logs-tail-lines måste vara >= 1");
             return 1;
         }
 
@@ -125,7 +125,7 @@ public class BatchStartCommand implements Callable<Integer> {
 
             String executionName = started.executionName();
             if (executionName == null || executionName.isBlank()) {
-                System.err.println("ERROR: start-svaret saknar executionName");
+                System.err.println("FEL: startsvaret saknar executionName");
                 return 1;
             }
 
@@ -150,15 +150,15 @@ public class BatchStartCommand implements Callable<Integer> {
             Thread.currentThread().interrupt();
             return 130;
         } catch (ApiException ex) {
-            System.err.println("ERROR: " + ex.getMessage());
+            System.err.println("FEL: " + ex.getMessage());
             return 1;
         } catch (Exception ex) {
-            System.err.println("ERROR: " + ex.getMessage());
+            System.err.println("FEL: " + ex.getMessage());
             return 1;
         }
     }
 
-    // ─── watch: polling ────────────────────────────────────────────────────────
+    // ─── bevakning: polling ────────────────────────────────────────────────────
 
     private int watchViaPolling(OpProxyApiClient client, String executionName)
             throws Exception {
@@ -185,17 +185,17 @@ public class BatchStartCommand implements Callable<Integer> {
         }
     }
 
-    // ─── watch: SSE ────────────────────────────────────────────────────────────
+    // ─── bevakning: SSE ────────────────────────────────────────────────────────
 
     private int watchViaSse(OpProxyApiClient client, String executionName)
             throws Exception {
-        // exitCode[0] used as mutable int inside lambda
+        // exitCode[0] används som muterbar int i lambda
         int[] exitCode = {4};
 
         client.stream(executionName, intervalSeconds, event -> {
             switch (event.type()) {
                 case "status" -> System.out.printf(
-                    "Status: fas=%s (active=%d succeeded=%d failed=%d)%n",
+                    "Status: fas=%s (aktiva=%d lyckade=%d misslyckade=%d)%n",
                     event.phase(),
                     orZero(event.activePods()),
                     orZero(event.succeededPods()),
@@ -218,7 +218,7 @@ public class BatchStartCommand implements Callable<Integer> {
         return exitCode[0];
     }
 
-    // ─── loggar (polling-läge) ─────────────────────────────────────────────────
+    // ─── loggar (pollingläge) ──────────────────────────────────────────────────
 
     private void printLogs(OpProxyApiClient client, String executionName) {
         System.out.printf("--- Loggar för körning %s ---%n", executionName);
@@ -257,7 +257,7 @@ public class BatchStartCommand implements Callable<Integer> {
         try {
             Runtime.getRuntime().removeShutdownHook(hook);
         } catch (IllegalStateException ignored) {
-            // JVM already shutting down – hook will run but executionNameRef is null → no-op
+            // JVM håller redan på att stängas ner. Hooken körs, men executionNameRef är null -> no-op
         }
     }
 
@@ -268,7 +268,7 @@ public class BatchStartCommand implements Callable<Integer> {
         for (String p : parameters) {
             int idx = p.indexOf('=');
             if (idx <= 0) {
-                System.err.println("ERROR: --parameter måste vara NAME=VALUE, fick: " + p);
+                System.err.println("FEL: --parameter måste vara NAME=VALUE, fick: " + p);
                 return null;
             }
             result.add(new JobParameterVO(p.substring(0, idx).trim(), p.substring(idx + 1)));

@@ -27,19 +27,19 @@ public class WebApplicationExceptionMapper implements ExceptionMapper<WebApplica
         String code = statusEnum == null ? "HTTP_" + status : statusEnum.name();
         String message = exception.getMessage();
         if (message == null || message.isBlank()) {
-            message = statusEnum == null ? "HTTP request failed" : statusEnum.getReasonPhrase();
+            message = statusEnum == null ? "HTTP-begäran misslyckades" : statusEnum.getReasonPhrase();
         }
 
         if (status >= 500) {
-            LOG.error("HTTP exception mapped to status {}: {}", status, message, exception);
+            LOG.error("HTTP-undantag mappat till status {}: {}", status, message, exception);
         } else {
-            LOG.info("HTTP exception mapped to status {}: {}", status, message);
+            LOG.info("HTTP-undantag mappat till status {}: {}", status, message);
         }
 
         return Response.status(status)
             .type(MediaType.APPLICATION_JSON)
             .entity(Map.of(
-                "error", "Request failed",
+                "error", "Begäran misslyckades",
                 "code", code,
                 "message", message
             ))

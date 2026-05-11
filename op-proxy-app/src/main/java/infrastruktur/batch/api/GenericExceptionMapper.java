@@ -19,13 +19,13 @@ public class GenericExceptionMapper implements ExceptionMapper<Exception> {
 
     @Override
     public Response toResponse(Exception exception) {
-        LOG.error("Unhandled error", exception);
+        LOG.error("Ohanterat fel", exception);
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
             .type(MediaType.APPLICATION_JSON)
             .entity(Map.of(
-                "error", "Internal server error",
+                "error", "Internt serverfel",
                 "code", "INTERNAL_ERROR",
-                "message", "An unexpected error occurred"
+                "message", "Ett oväntat fel uppstod"
             ))
             .build();
     }

@@ -1,20 +1,20 @@
-# RFC: Template/Execution API for op-proxy-app 
+# RFC: Template-/körnings-API för op-proxy-app 
 
-Detta dokument beskriver kontraktet för template-baserade executions.
+Detta dokument beskriver kontraktet för template-baserade körningar.
 
-Malen ar:
+Målen är:
 
 1. Konsekvent namngivning: execution/start/stop.
-2. Enkel klientmodell med tydliga state-overgangar.
+2. Enkel klientmodell med tydliga statusövergångar.
 3. En enhetlig intern logik utan versionssplit.
 
 ## 1. API-kontrakt 
 
-### 1.1 Starta ny execution fran template
+### 1.1 Starta ny körning från template
 
 `POST /api/templates/{templateName}/start`
 
-Request body (`StartExecutionRequestVO`):
+Begärans innehåll (`StartExecutionRequestVO`):
 
 ```json
 {
@@ -27,7 +27,7 @@ Request body (`StartExecutionRequestVO`):
 }
 ```
 
-Response (`ExecutionActionResponseVO`):
+Svar (`ExecutionActionResponseVO`):
 
 ```json
 {
@@ -41,11 +41,11 @@ Response (`ExecutionActionResponseVO`):
 }
 ```
 
-### 1.2 Hamta execution-status
+### 1.2 Hämta körningsstatus
 
 `GET /api/executions/{executionName}`
 
-Response (`ExecutionStatusResponseVO`):
+Svar (`ExecutionStatusResponseVO`):
 
 ```json
 {
@@ -61,13 +61,13 @@ Response (`ExecutionStatusResponseVO`):
 }
 ```
 
-### 1.3 Stoppa execution
+### 1.3 Stoppa körning
 
 `POST /api/executions/{executionName}/stop`
 
 Ingen request body.
 
-Response (`ExecutionActionResponseVO`):
+Svar (`ExecutionActionResponseVO`):
 
 ```json
 {
@@ -82,18 +82,18 @@ Response (`ExecutionActionResponseVO`):
 
 ## 2. Namnstrategi
 
-`executionName` skickas inte in av klienten. `executionName` sätts av processad OpenShift-template via `metadata.name`.
+`executionName` skickas inte in av klienten. `executionName` sätts av den processade OpenShift-template via `metadata.name`.
 
 Regler:
 
-1. `executionName` styrs av template-forfattaren i `template.yaml`.
-2. För multi-instance kan templaten generera suffix (t.ex. `generate: expression`).
+1. `executionName` styrs av template-författaren i `template.yaml`.
+2. För multi-instance kan template generera suffix (t.ex. `generate: expression`).
 3. För single-instance används fast namn; om jobb med samma namn redan finns returneras `AlreadyExists` från Kubernetes.
 4. `clientRequestId` kan användas för korrelation och framtida idempotens per `templateName + clientRequestId`.
 
 ## 3. VO-kontrakt (records)
 
-Modelklasser under `infrastruktur.batch.model`:
+Modellklasser under `infrastruktur.batch.model`:
 
 1. `StartExecutionRequestVO`
 2. `ExecutionActionResponseVO`
@@ -104,9 +104,9 @@ Modelklasser under `infrastruktur.batch.model`:
 1. `TemplateExecutionResource` 
 2. `TemplateExecutionService`
 
-Tidigare v1-resurser är borttagna; endast template/execution-kontraktet gäller.
+Tidigare v1-resurser är borttagna; endast template-/execution-kontraktet gäller.
 
-## 5. Exit-koder och CLI 
+## 5. Exit-koder och CLI
 
 1. `0` = `SUCCEEDED` eller `STOPPED`
 2. `10` = `RUNNING` eller `PENDING`

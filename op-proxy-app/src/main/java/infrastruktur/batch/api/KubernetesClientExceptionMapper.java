@@ -25,24 +25,24 @@ public class KubernetesClientExceptionMapper implements ExceptionMapper<Kubernet
         boolean alreadyExists = code == 409 || message.contains("AlreadyExists");
 
         if (alreadyExists) {
-            LOG.info("Kubernetes conflict while creating resource: {}", message);
+            LOG.info("Kubernetes-konflikt vid skapande av resurs: {}", message);
             return Response.status(Response.Status.CONFLICT)
                 .type(MediaType.APPLICATION_JSON)
                 .entity(Map.of(
-                    "error", "Resource already exists",
+                    "error", "Resursen finns redan",
                     "code", "ALREADY_EXISTS",
-                    "message", message.isEmpty() ? "Resource already exists" : message
+                    "message", message.isEmpty() ? "Resursen finns redan" : message
                 ))
                 .build();
         }
 
-        LOG.error("Kubernetes client error", exception);
+        LOG.error("Kubernetes-klientfel", exception);
         return Response.status(Response.Status.BAD_GATEWAY)
             .type(MediaType.APPLICATION_JSON)
             .entity(Map.of(
-                "error", "Kubernetes API error",
+                "error", "Kubernetes-API-fel",
                 "code", "KUBERNETES_API_ERROR",
-                "message", message.isEmpty() ? "Failed to communicate with Kubernetes API" : message
+                "message", message.isEmpty() ? "Kunde inte kommunicera med Kubernetes-API" : message
             ))
             .build();
     }

@@ -1,7 +1,7 @@
 package infrastruktur.batch.client;
 
 /**
- * Thrown when op-proxy-app returns a non-2xx HTTP status.
+ * Kastas när op-proxy-app returnerar en HTTP-status utanför 2xx.
  */
 public class ApiException extends RuntimeException {
     private final int statusCode;

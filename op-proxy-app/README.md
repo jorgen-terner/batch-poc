@@ -6,9 +6,9 @@ Appen stödjer template/run-flöde, där nya Jobs skapas från ett template-Job.
 
 ## Teknikval
 
-- Kubernetes integration via Fabric8 Kubernetes Client
-- OpenShift Template-processing via Fabric8 OpenShift Client
-- HTTP API via Quarkus (REST + CDI)
+- Kubernetes-integration med Fabric8 Kubernetes Client
+- OpenShift template processing med Fabric8 OpenShift Client
+- HTTP-API via Quarkus (REST + CDI)
 
 ## Koncept
 
@@ -20,25 +20,25 @@ Här används ett befintligt template-Job som källa. Vid varje ny körning kopi
 ./gradlew quarkusDev
 ```
 
-Bygg jar:
+Bygg JAR:
 
 ```bash
 ./gradlew build
 ```
 
-## Deploy till OpenShift
+## Driftsätt till OpenShift
 
-### Manuell deploy
+### Manuell driftsättning
 
 ```bash
 # Skapa BuildConfig (en gång) - viktigt med --to för att tagga automatiskt!
 oc new-build --binary --name=op-proxy --strategy=docker --to=op-proxy:latest -n dev252
 
-# Bygg från modulkatalogen med färdigbyggda artifacts
+# Bygg från modulkatalogen med färdigbyggda byggartefakter
 cd op-proxy-app
 oc start-build op-proxy --from-dir=. --follow -n dev252
 
-# Deploya med template (inkluderar Deployment + Service)
+# Driftsätt med template (inkluderar Deployment + Service)
 cd ..
 oc process -f deployment-template.yaml -p NAMESPACE=dev252 | oc apply -f -
 ```
@@ -62,16 +62,16 @@ op-proxy-app behöver namespaced RBAC för att kunna styra template/run-körning
 
 RBAC är utbrutet i separat fil: `rbac-op-proxy-app.yaml`.
 
-### Verifiera deployment
+### Verifiera driftsättning
 
 ```bash
 # Kontrollera status
 oc -n batch-jobs get deployment,pods
 
-# Visa logs
+# Visa loggar
 oc -n batch-jobs logs -l app=op-proxy-app -f
 
-# Få API-endpoint
+# Hämta API-endpoint
 oc -n batch-jobs get route op-proxy-app -o jsonpath='{.spec.host}'
 
 # Test hälsostatus
@@ -104,9 +104,9 @@ LOG_LEVEL=DEBUG ./gradlew quarkusDev
 
 API:t används för template-baserade körningar i OpenShift/Kubernetes.
 
-Flödet utgår från en OpenShift Template-resurs i klustret. När klienten startar en execution processar op-proxy-app templaten, använder `metadata.name` från processad template som `executionName`, applicerar eventuella parametrar som template-parametrar och skapar ett nytt Job.
+Flödet utgår från en OpenShift Template-resurs i klustret. När klienten startar en körning processar op-proxy-app template, använder `metadata.name` från processad template som `executionName`, applicerar eventuella parametrar som template-parametrar och skapar ett nytt Job.
 
-Notis: implementationen använder båda API-varianterna. Jobs/pods hanteras via Kubernetes API, medan template-processing görs via OpenShift Template API (server-side processing med lokal fallback).
+Notis: implementationen använder båda API-varianterna. Jobs/pods hanteras via Kubernetes API, medan template processing görs via OpenShift Template API (server-side processing med lokal fallback).
 
 Se [TEMPLATE-EXECUTION-API-RFC.md](TEMPLATE-EXECUTION-API-RFC.md) för bakgrund och migreringsidéer. README:n nedan beskriver den aktuella implementationen.
 
@@ -119,7 +119,7 @@ Se [TEMPLATE-EXECUTION-API-RFC.md](TEMPLATE-EXECUTION-API-RFC.md) för bakgrund 
 ### curl-exempel
 
 ```bash
-# 1) Start execution
+# 1) Starta körning
 curl -sS -X POST "http://localhost:8080/api/templates/$TEMPLATE_NAME/start" -H "Content-Type: application/json"
   --data-raw '{
     "clientRequestId": "manual-2026-04-23-001",
@@ -131,25 +131,25 @@ curl -sS -X POST "http://localhost:8080/api/templates/$TEMPLATE_NAME/start" -H "
   }'
 
 
-Läs ut executionName från start-svar
+# Läs ut executionName från startsvaret
 
-# 2) Execution status
+# 2) Hämta körningsstatus
 curl -sS -X GET "http://localhost:8080/api/executions/$EXECUTION_NAME"
 
-# 3) Stop execution
+# 3) Stoppa körning
 curl -sS -X POST "http://localhost:8080/api/executions/$EXECUTION_NAME/stop"
 ```
 
 ### Kontrakt
 
-Start request:
+Startbegäran:
 - `clientRequestId`: valfri korrelationsnyckel från klienten
 - `timeoutSeconds`: valfri timeout som sätts som `activeDeadlineSeconds`
-- `parameters`: valfri lista av `name/value` som skickas som OpenShift template-parametrar vid processering av templaten
+- `parameters`: valfri lista av `name/value` som skickas som OpenShift template-parametrar vid processering av template
 
-Start/stop response (`ExecutionActionResponseVO`) innehåller `namespace`, `templateName`, `executionName`, `clientRequestId`, `action`, `state`, `message` och `createdAt`.
+Start-/stoppsvar (`ExecutionActionResponseVO`) innehåller `namespace`, `templateName`, `executionName`, `clientRequestId`, `action`, `state`, `message` och `createdAt`.
 
-Status response (`ExecutionStatusResponseVO`) innehåller `namespace`, `templateName`, `executionName`, `phase`, pod-räknare och tidsfält.
+Statussvar (`ExecutionStatusResponseVO`) innehåller `namespace`, `templateName`, `executionName`, `phase`, pod-räknare och tidsfält.
 
 `executionName` skickas inte in av klienten. Det sätts av processad template (`metadata.name`) och returneras i start-responsen för status- och stop-anrop.
 
@@ -158,16 +158,16 @@ Validering av `parameters`:
 - `value` måste vara satt (`""` tom sträng är giltigt)
 - Dubbel `name` i samma request avvisas
 
-Notis: `parameters` används enbart som template-parametrar vid processering av OpenShift Template. De injiceras inte som separata env-overrides efter att templaten processats.
+Notis: `parameters` används enbart som template-parametrar vid processering av OpenShift Template. De injiceras inte som separata env-overrides efter att template processats.
 
-Stop request:
+Stoppbegäran:
 - Ingen request body
 - Stop utför alltid graceful stop (suspend), väntar en kort stund på att aktiva pods ska stanna och raderar sedan execution-Jobbet
 
 ### Flöde
 
 1. Klienten anropar `POST /api/templates/{templateName}/start`.
-2. op-proxy-app processar templaten i samma namespace.
+2. op-proxy-app processar template i samma namespace.
 3. `executionName` läses från `metadata.name` i processad template.
 4. Ett nytt Job skapas från processad template med labels för template och execution.
 5. Klienten följer körningen via `GET /api/executions/{executionName}`.

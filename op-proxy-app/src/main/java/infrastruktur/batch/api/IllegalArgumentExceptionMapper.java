@@ -19,12 +19,12 @@ public class IllegalArgumentExceptionMapper implements ExceptionMapper<IllegalAr
 
     @Override
     public Response toResponse(IllegalArgumentException exception) {
-        LOG.warn("Invalid request: {}", exception.getMessage());
-        String message = exception.getMessage() != null ? exception.getMessage() : "Invalid request";
+        LOG.warn("Ogiltig begäran: {}", exception.getMessage());
+        String message = exception.getMessage() != null ? exception.getMessage() : "Ogiltig begäran";
         return Response.status(Response.Status.BAD_REQUEST)
             .type(MediaType.APPLICATION_JSON)
             .entity(Map.of(
-                "error", "Invalid request",
+                "error", "Ogiltig begäran",
                 "code", "BAD_REQUEST",
                 "message", message
             ))

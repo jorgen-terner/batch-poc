@@ -249,7 +249,7 @@ public class KubernetesJobGateway {
             if (!shouldFallbackToLocalProcessing(ex)) {
                 throw ex;
             }
-            LOG.debug("Template server-side processing failed for {}/{} ({}), trying local processing",
+            LOG.debug("Server-side template processing misslyckades för {}/{} ({}), försöker local processing",
                 namespace, templateName, ex.getMessage());
             processed = templateResource.processLocally(templateParameters);
         }
@@ -395,7 +395,7 @@ public class KubernetesJobGateway {
             Thread.sleep(millis);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while waiting for Kubernetes operation", ex);
+            throw new IllegalStateException("Avbruten under väntan på Kubernetes-operation", ex);
         }
     }
 }
