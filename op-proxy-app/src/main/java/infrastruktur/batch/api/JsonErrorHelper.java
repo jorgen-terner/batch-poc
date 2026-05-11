@@ -3,14 +3,14 @@ package infrastruktur.batch.api;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 /**
- * Utility for extracting and formatting deserialization error messages from
- * Jackson exceptions while avoiding sensitive data leakage.
+ * Hjälpklass för att extrahera och formatera deserialiseringsfelmeddelanden från
+ * Jackson-undantag utan att läcka känslig data.
  */
 public class JsonErrorHelper {
 
     /**
-     * Walk the exception cause chain and extract the first Jackson exception message.
-     * Returns null if no Jackson exception is found.
+     * Traverserar undantagets orsakskedja och extraherar det första Jackson-felmeddelandet.
+     * Returnerar null om inget Jackson-undantag hittas.
      */
     public static String extractJsonErrorMessage(Throwable throwable) {
         Throwable current = throwable;
@@ -20,7 +20,7 @@ public class JsonErrorHelper {
                     ? ""
                     : " (line " + jsonException.getLocation().getLineNr()
                         + ", column " + jsonException.getLocation().getColumnNr() + ")";
-                return "Request body could not be deserialized" + location + ": " + jsonException.getOriginalMessage();
+                return "Request body kunde inte deserialiseras" + location + ": " + jsonException.getOriginalMessage();
             }
             current = current.getCause();
         }
@@ -28,6 +28,6 @@ public class JsonErrorHelper {
     }
 
     private JsonErrorHelper() {
-        // utility class
+        // hjälpklass
     }
 }
