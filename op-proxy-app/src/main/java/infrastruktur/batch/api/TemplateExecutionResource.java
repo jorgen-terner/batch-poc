@@ -100,11 +100,11 @@ public class TemplateExecutionResource {
     public Multi<ExecutionStreamEventVO> stream(
         @jakarta.ws.rs.PathParam("executionName") String executionName,
         @QueryParam("intervalSeconds") @DefaultValue("3") int intervalSeconds,
-        @QueryParam("namespace") String overrideNamespace
-        // intervalSeconds måste vara >= 1; valideras i service, returnerar 400 om det bryts
+        @QueryParam("namespace") String overrideNamespace,
+        @QueryParam("since") String since
     ) {
         String effectiveNamespace = overrideNamespace != null && !overrideNamespace.isBlank() ? overrideNamespace : namespace;
-        return templateExecutionService.streamExecution(effectiveNamespace, executionName, intervalSeconds);
+        return templateExecutionService.streamExecution(effectiveNamespace, executionName, intervalSeconds, since);
     }
 
     @POST

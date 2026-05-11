@@ -20,5 +20,6 @@ public record ExecutionStreamEventVO(
     Integer failedPods,
     String pod,
     String output,
-    Integer exitCode
+    Integer exitCode,
+    String cursor
 ) {}

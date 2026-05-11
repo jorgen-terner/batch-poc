@@ -21,21 +21,22 @@ public record ExecutionStreamEventVO(
     Integer failedPods,
     String pod,
     String output,
-    Integer exitCode
+    Integer exitCode,
+    String cursor
 ) {
-    public static ExecutionStreamEventVO status(ExecutionStatusResponseVO s) {
+    public static ExecutionStreamEventVO status(ExecutionStatusResponseVO s, String cursor) {
         return new ExecutionStreamEventVO(
             "status", s.phase(),
             s.activePods(), s.succeededPods(), s.failedPods(),
-            null, null, null
+            null, null, null, cursor
         );
     }
 
-    public static ExecutionStreamEventVO log(String pod, String output) {
-        return new ExecutionStreamEventVO("log", null, null, null, null, pod, output, null);
+    public static ExecutionStreamEventVO log(String pod, String output, String cursor) {
+        return new ExecutionStreamEventVO("log", null, null, null, null, pod, output, null, cursor);
     }
 
-    public static ExecutionStreamEventVO done(String phase, int exitCode) {
-        return new ExecutionStreamEventVO("done", phase, null, null, null, null, null, exitCode);
+    public static ExecutionStreamEventVO done(String phase, int exitCode, String cursor) {
+        return new ExecutionStreamEventVO("done", phase, null, null, null, null, null, exitCode, cursor);
     }
 }

@@ -57,6 +57,8 @@ java -jar op-proxy-client/build/libs/op-proxy-client-0.1.0.jar my-template \
   --sse --interval-seconds 3
 ```
 
+Vid `--sse` hålls en öppen ström under körningen. Om anslutningen bryts försöker klienten återansluta och skickar då med lästa logg-offsets via `since` för att undvika dubbla rader.
+
 ## Vanliga flaggor
 
 - `--base-url` bas-URL till `op-proxy-app` (default: `http://localhost:8080` eller miljövariabel `OP_PROXY_BASE_URL`)

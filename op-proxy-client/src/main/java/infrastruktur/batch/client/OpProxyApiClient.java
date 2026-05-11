@@ -15,6 +15,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
 
 /**
@@ -112,9 +113,25 @@ public class OpProxyApiClient implements AutoCloseable {
      */
     public void stream(String executionName, int intervalSeconds, String namespace, Consumer<ExecutionStreamEventVO> onEvent)
             throws IOException, InterruptedException {
+        stream(executionName, intervalSeconds, namespace, null, onEvent);
+    }
+
+    /**
+     * Öppnar en SSE-ström och skickar med tidscursor som since-parameter vid reconnect.
+     */
+    public void stream(
+            String executionName,
+            int intervalSeconds,
+            String namespace,
+            String since,
+            Consumer<ExecutionStreamEventVO> onEvent)
+            throws IOException, InterruptedException {
         String url = baseUrl + "/api/executions/" + executionName + "/stream?intervalSeconds=" + intervalSeconds;
         if (namespace != null && !namespace.isBlank()) {
             url += "&namespace=" + namespace;
+        }
+        if (since != null && !since.isBlank()) {
+            url += "&since=" + java.net.URLEncoder.encode(since, StandardCharsets.UTF_8);
         }
         HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(url))

@@ -195,29 +195,64 @@ public class BatchStartCommand implements Callable<Integer> {
             throws Exception {
         // exitCode[0] används som muterbar int i lambda
         int[] exitCode = {4};
+        boolean[] completed = {false};
+        String[] sinceCursor = {null};
+        Instant started = Instant.now();
 
-        client.stream(executionName, intervalSeconds, kubeNamespace, event -> {
-            switch (event.type()) {
-                case "status" -> System.out.printf(
-                    "Status: fas=%s (aktiva=%d lyckade=%d misslyckade=%d)%n",
-                    event.phase(),
-                    orZero(event.activePods()),
-                    orZero(event.succeededPods()),
-                    orZero(event.failedPods()));
-                case "log" -> {
-                    System.out.printf("--- Logg: %s ---%n", event.pod());
-                    if (event.output() != null) {
-                        System.out.println(event.output());
-                    }
+        while (!completed[0]) {
+            if (watchTimeoutSeconds > 0) {
+                long elapsed = Duration.between(started, Instant.now()).toSeconds();
+                if (elapsed >= watchTimeoutSeconds) {
+                    System.err.printf("Timeout efter %ds i SSE-läge%n", watchTimeoutSeconds);
+                    return 124;
                 }
-                case "done" -> {
-                    System.out.printf("Klar: fas=%s exitCode=%d%n",
-                        event.phase(), orZero(event.exitCode()));
-                    exitCode[0] = orZero(event.exitCode());
-                }
-                default -> { /* okänd event-typ – ignorera */ }
             }
-        });
+
+            try {
+                client.stream(executionName, intervalSeconds, kubeNamespace, sinceCursor[0], event -> {
+                    switch (event.type()) {
+                        case "status" -> System.out.printf(
+                            "Status: fas=%s (aktiva=%d lyckade=%d misslyckade=%d)%n",
+                            event.phase(),
+                            orZero(event.activePods()),
+                            orZero(event.succeededPods()),
+                            orZero(event.failedPods()));
+                        case "log" -> {
+                            if (event.cursor() != null && !event.cursor().isBlank()) {
+                                sinceCursor[0] = event.cursor();
+                            }
+                            System.out.printf("--- Logg: %s ---%n", event.pod());
+                            if (event.output() != null) {
+                                System.out.println(event.output());
+                            }
+                        }
+                        case "done" -> {
+                            if (event.cursor() != null && !event.cursor().isBlank()) {
+                                sinceCursor[0] = event.cursor();
+                            }
+                            System.out.printf("Klar: fas=%s exitCode=%d%n",
+                                event.phase(), orZero(event.exitCode()));
+                            exitCode[0] = orZero(event.exitCode());
+                            completed[0] = true;
+                        }
+                        default -> { /* okänd event-typ – ignorera */ }
+                    }
+                });
+                if (!completed[0]) {
+                    System.err.println("Varning: SSE-strömmen avslutades utan done-event, försöker återansluta...");
+                    Thread.sleep(Math.max(1000L, intervalSeconds * 1000L));
+                }
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw ex;
+            } catch (Exception ex) {
+                if (completed[0]) {
+                    break;
+                }
+                System.err.println("Varning: SSE-anslutning bröts, försöker återansluta: " + ex.getMessage());
+                Thread.sleep(Math.max(1000L, intervalSeconds * 1000L));
+            }
+        }
 
         return exitCode[0];
     }

@@ -18,14 +18,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @ApplicationScoped
 public class TemplateExecutionService {
     private static final Logger LOG = LoggerFactory.getLogger(TemplateExecutionService.class);
     private static final long DEFAULT_STOP_GRACEFUL_POLL_INTERVAL_MILLIS = 1000L;
     private static final int DEFAULT_STOP_GRACEFUL_MAX_ATTEMPTS = 20;
+    private static final long STREAM_OVERLAP_MILLIS = 1000L;
+    private static final int STREAM_DEDUP_TAIL_CHARS = 4096;
+    private static final int STREAM_IRRECOVERABLE_CHECK_EVERY = 6;
 
     private final KubernetesJobGateway kubernetesJobGateway;
     private final JobPhaseResolver jobPhaseResolver;
@@ -103,6 +114,10 @@ public class TemplateExecutionService {
     }
 
     public ExecutionStatusResponseVO status(String namespace, String executionName) {
+        return status(namespace, executionName, true);
+    }
+
+    private ExecutionStatusResponseVO status(String namespace, String executionName, boolean includeIrrecoverableCheck) {
         Job executionJob = kubernetesJobGateway.requireJob(namespace, executionName);
         JobStatus status = executionJob.getStatus();
 
@@ -110,7 +125,8 @@ public class TemplateExecutionService {
         int succeeded = status != null && status.getSucceeded() != null ? status.getSucceeded() : 0;
         int failed = status != null && status.getFailed() != null ? status.getFailed() : 0;
         boolean suspended = executionJob.getSpec() != null && Boolean.TRUE.equals(executionJob.getSpec().getSuspend());
-        boolean irrecoverablePodFailure = kubernetesJobGateway.hasIrrecoverablePodFailure(namespace, executionName);
+        boolean irrecoverablePodFailure = includeIrrecoverableCheck
+            && kubernetesJobGateway.hasIrrecoverablePodFailure(namespace, executionName);
 
         Instant startTime = JobHelper.parseInstant(status == null ? null : status.getStartTime());
         Instant completionTime = JobHelper.parseInstant(status == null ? null : status.getCompletionTime());
@@ -151,51 +167,140 @@ public class TemplateExecutionService {
     }
 
     /**
-     * Returnerar en SSE-ström med periodiska statusuppdateringar och loggar när körningen avslutas.
-     * Strömmen stängs automatiskt när terminal fas nåtts (SUCCEEDED, FAILED, STOPPED, m.fl.).
+     * Returnerar en SSE-ström med periodiska statusuppdateringar och inkrementella loggrader.
+     * Om {@code sinceJson} anges används det som start-offset per pod vid reconnect.
      */
     public Multi<ExecutionStreamEventVO> streamExecution(String namespace, String executionName, int intervalSeconds) {
+        return streamExecution(namespace, executionName, intervalSeconds, null);
+    }
+
+    /**
+     * Returnerar en SSE-ström med periodiska statusuppdateringar och inkrementella loggrader.
+     *
+     * @param sinceJson JSON med pod-namn -> antal redan konsumerade loggrader.
+     */
+    public Multi<ExecutionStreamEventVO> streamExecution(
+        String namespace,
+        String executionName,
+        int intervalSeconds,
+        String since
+    ) {
         if (intervalSeconds < 1) {
             throw new IllegalArgumentException("intervalSeconds måste vara >= 1");
         }
-        // Fail-fast: kontrollera att jobbet finns innan SSE-strömmen öppnas.
-        // Jobbet kan försvinna senare under loopen; det hanteras gracefully nedan.
+
         kubernetesJobGateway.requireJob(namespace, executionName);
         long pollMillis = (long) intervalSeconds * 1000L;
+        Instant[] cursor = {parseSinceInstant(since)};
+        Map<String, String> emittedTailByPod = new HashMap<>();
+        AtomicInteger pollCounter = new AtomicInteger(0);
 
         return Multi.createFrom().<ExecutionStreamEventVO>emitter(emitter -> {
-            try {
-                while (!emitter.isCancelled()) {
-                    ExecutionStatusResponseVO s;
-                    try {
-                        s = status(namespace, executionName);
-                    } catch (KubernetesClientException ex) {
-                        LOG.warn("Tillfälligt Kubernetes-fel under strömning av {}/{}, försöker igen: {}",
-                            namespace, executionName, ex.getMessage());
-                        Thread.sleep(pollMillis);
-                        continue;
+            ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "execution-stream-" + executionName);
+                t.setDaemon(true);
+                return t;
+            });
+            AtomicBoolean closed = new AtomicBoolean(false);
+
+            Runnable poll = () -> {
+                if (closed.get() || emitter.isCancelled()) {
+                    return;
+                }
+
+                Instant upperBound = Instant.now();
+                ExecutionStatusResponseVO s;
+                try {
+                    boolean checkIrrecoverable = pollCounter.getAndIncrement() % STREAM_IRRECOVERABLE_CHECK_EVERY == 0;
+                    s = status(namespace, executionName, checkIrrecoverable);
+                } catch (KubernetesClientException ex) {
+                    LOG.warn("Tillfälligt Kubernetes-fel under strömning av {}/{}, försöker igen: {}",
+                        namespace, executionName, ex.getMessage());
+                    return;
+                } catch (Exception ex) {
+                    if (closed.compareAndSet(false, true)) {
+                        emitter.fail(ex);
+                        scheduler.shutdownNow();
                     }
+                    return;
+                }
 
-                    emitter.emit(ExecutionStreamEventVO.status(s));
+                String cursorValue = upperBound.toString();
+                emitter.emit(ExecutionStreamEventVO.status(s, cursorValue));
 
-                    if (isTerminalPhase(s.phase())) {
-                        ExecutionLogsResponseVO logsVO = logs(namespace, executionName, null);
-                        logsVO.logsByPod().forEach((pod, output) ->
-                            emitter.emit(ExecutionStreamEventVO.log(pod, output)));
-                        emitter.emit(ExecutionStreamEventVO.done(s.phase(), phaseToExitCode(s.phase())));
-                        emitter.complete();
+                Instant readFrom = cursor[0].minusMillis(STREAM_OVERLAP_MILLIS);
+                Map<String, String> newLogsByPod = kubernetesJobGateway.readExecutionLogsSinceTime(
+                    namespace,
+                    executionName,
+                    readFrom
+                );
+                cursor[0] = upperBound;
+
+                newLogsByPod.forEach((pod, output) -> {
+                    if (output == null || output.isBlank()) {
                         return;
                     }
 
-                    Thread.sleep(pollMillis);
+                    String previousTail = emittedTailByPod.getOrDefault(pod, "");
+                    String deduped = removePrefixOverlap(previousTail, output);
+                    if (deduped.isBlank()) {
+                        return;
+                    }
+
+                    emitter.emit(ExecutionStreamEventVO.log(pod, deduped, cursorValue));
+                    emittedTailByPod.put(pod, tail(previousTail + deduped, STREAM_DEDUP_TAIL_CHARS));
+                });
+
+                if (isTerminalPhase(s.phase()) && closed.compareAndSet(false, true)) {
+                    emitter.emit(ExecutionStreamEventVO.done(s.phase(), phaseToExitCode(s.phase()), cursorValue));
+                    emitter.complete();
+                    scheduler.shutdownNow();
                 }
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-                emitter.complete();
-            } catch (Exception ex) {
-                emitter.fail(ex);
-            }
+            };
+
+            ScheduledFuture<?> future = scheduler.scheduleWithFixedDelay(poll, 0L, pollMillis, TimeUnit.MILLISECONDS);
+            emitter.onTermination(() -> {
+                if (closed.compareAndSet(false, true)) {
+                    future.cancel(true);
+                    scheduler.shutdownNow();
+                }
+            });
         }).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+    }
+
+    private Instant parseSinceInstant(String since) {
+        if (since == null || since.isBlank()) {
+            return Instant.now();
+        }
+        try {
+            return Instant.parse(since);
+        } catch (DateTimeParseException ex) {
+            LOG.warn("Kunde inte parsa since='{}', startar från nu: {}", since, ex.getMessage());
+            return Instant.now();
+        }
+    }
+
+    private static String removePrefixOverlap(String previousTail, String currentChunk) {
+        if (previousTail == null || previousTail.isEmpty() || currentChunk == null || currentChunk.isEmpty()) {
+            return currentChunk == null ? "" : currentChunk;
+        }
+
+        int max = Math.min(previousTail.length(), currentChunk.length());
+        for (int overlap = max; overlap > 0; overlap--) {
+            String previousSuffix = previousTail.substring(previousTail.length() - overlap);
+            String currentPrefix = currentChunk.substring(0, overlap);
+            if (previousSuffix.equals(currentPrefix)) {
+                return currentChunk.substring(overlap);
+            }
+        }
+        return currentChunk;
+    }
+
+    private static String tail(String value, int maxChars) {
+        if (value == null || value.length() <= maxChars) {
+            return value == null ? "" : value;
+        }
+        return value.substring(value.length() - maxChars);
     }
 
     private static boolean isTerminalPhase(String phase) {
@@ -218,7 +323,6 @@ public class TemplateExecutionService {
         Job executionJob = kubernetesJobGateway.requireJob(namespace, executionName);
         String templateName = resolveTemplateName(executionJob);
 
-        // Best-effort stopsignal innan körningen avslutas.
         try {
             kubernetesJobGateway.patchSuspend(namespace, executionName, true);
         } catch (KubernetesClientException ex) {

@@ -4,6 +4,7 @@ import infrastruktur.batch.metrics.JobMetricsReporter;
 import infrastruktur.batch.model.ExecutionActionResponseVO;
 import infrastruktur.batch.model.ExecutionLogsResponseVO;
 import infrastruktur.batch.model.ExecutionStatusResponseVO;
+import infrastruktur.batch.model.ExecutionStreamEventVO;
 import infrastruktur.batch.model.JobParameterVO;
 import infrastruktur.batch.model.StartExecutionRequestVO;
 import io.fabric8.kubernetes.api.model.batch.v1.Job;
@@ -18,6 +19,11 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.time.Instant;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -29,6 +35,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -210,6 +217,65 @@ class TemplateExecutionServiceTest {
             .thenThrow(new NoSuchElementException("Job not found: default/missing"));
 
         assertThrows(NoSuchElementException.class, () -> service.logs(NS, "missing", null));
+    }
+
+    // ─── stream ───────────────────────────────────────────────────────────────
+
+    @Test
+    void streamShouldEmitStatusLogDoneWithCursorAndUseSinceTimestamp() {
+        String since = "2026-05-11T00:00:00Z";
+
+        when(kubernetesJobGateway.requireJob(NS, EXEC)).thenReturn(jobWithTemplateLabel(EXEC, TEMPLATE));
+        when(kubernetesJobGateway.hasIrrecoverablePodFailure(NS, EXEC)).thenReturn(false);
+        when(jobPhaseResolver.resolvePhase(any(), anyInt(), anyInt(), anyInt(), anyBoolean()))
+            .thenReturn("SUCCEEDED");
+        when(kubernetesJobGateway.readExecutionLogsSinceTime(eq(NS), eq(EXEC),
+            argThat(i -> i.equals(Instant.parse(since).minusMillis(1000L)))))
+            .thenReturn(Map.of("pod-1", "line-1\n"));
+
+        List<ExecutionStreamEventVO> events = service.streamExecution(NS, EXEC, 1, since)
+            .select().first(3)
+            .collect().asList()
+            .await().atMost(Duration.ofSeconds(5));
+
+        assertEquals(3, events.size());
+        assertEquals("status", events.get(0).type());
+        assertEquals("log", events.get(1).type());
+        assertEquals("done", events.get(2).type());
+        assertNotNull(events.get(0).cursor());
+        assertNotNull(events.get(1).cursor());
+        assertNotNull(events.get(2).cursor());
+    }
+
+    @Test
+    void streamShouldHandleMultipleConcurrentTerminalSubscriptions() {
+        when(kubernetesJobGateway.requireJob(NS, EXEC)).thenReturn(jobWithTemplateLabel(EXEC, TEMPLATE));
+        when(kubernetesJobGateway.hasIrrecoverablePodFailure(NS, EXEC)).thenReturn(false);
+        when(jobPhaseResolver.resolvePhase(any(), anyInt(), anyInt(), anyInt(), anyBoolean()))
+            .thenReturn("SUCCEEDED");
+        when(kubernetesJobGateway.readExecutionLogsSinceTime(anyString(), anyString(), any()))
+            .thenReturn(Map.of());
+
+        var pool = Executors.newFixedThreadPool(8);
+        try {
+            List<CompletableFuture<List<ExecutionStreamEventVO>>> futures = java.util.stream.IntStream.range(0, 10)
+                .mapToObj(i -> CompletableFuture.supplyAsync(() -> service.streamExecution(NS, EXEC, 1, null)
+                    .select().first(2)
+                    .collect().asList()
+                    .await().atMost(Duration.ofSeconds(5)), pool))
+                .toList();
+
+            for (CompletableFuture<List<ExecutionStreamEventVO>> f : futures) {
+                List<ExecutionStreamEventVO> events = f.get(6, TimeUnit.SECONDS);
+                assertEquals(2, events.size());
+                assertEquals("status", events.get(0).type());
+                assertEquals("done", events.get(1).type());
+            }
+        } catch (Exception ex) {
+            throw new AssertionError("Concurrent stream test failed", ex);
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     // ─── stop ──────────────────────────────────────────────────────────────────

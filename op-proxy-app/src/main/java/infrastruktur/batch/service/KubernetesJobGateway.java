@@ -26,6 +26,8 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Comparator;
 import java.util.Set;
+import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 
 @ApplicationScoped
 public class KubernetesJobGateway {
@@ -128,6 +130,68 @@ public class KubernetesJobGateway {
                     logOutput = client.pods().inNamespace(namespace).withName(podName).getLog();
                 }
                 logsByPod.put(podName, logOutput == null ? "" : logOutput);
+            });
+
+        return logsByPod;
+    }
+
+    /**
+     * Hämtar endast nya loggrader från poddarna sedan de angivna radoffsets.
+     * Returnerar endast rader efter offseten för varje pod.
+     */
+    public Map<String, String> readExecutionLogsSince(String namespace, String jobName, Map<String, Integer> lineOffsetByPod) {
+        Map<String, Integer> offsets = lineOffsetByPod == null ? new HashMap<>() : lineOffsetByPod;
+        var podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
+        Map<String, String> newLogsByPod = new LinkedHashMap<>();
+
+        podList.getItems().stream()
+            .filter(pod -> pod != null && pod.getMetadata() != null && pod.getMetadata().getName() != null)
+            .map(pod -> pod.getMetadata().getName())
+            .sorted(Comparator.naturalOrder())
+            .forEach(podName -> {
+                String fullLogOutput = client.pods().inNamespace(namespace).withName(podName).getLog();
+                if (fullLogOutput == null) {
+                    fullLogOutput = "";
+                }
+
+                String normalized = fullLogOutput.stripTrailing();
+                String[] allLines = normalized.isEmpty() ? new String[0] : normalized.split("\\R");
+                int previousLineCount = offsets.getOrDefault(podName, 0);
+
+                if (allLines.length > previousLineCount) {
+                    String[] newLines = java.util.Arrays.copyOfRange(allLines, previousLineCount, allLines.length);
+                    String newLogs = String.join("\n", newLines);
+                    if (!newLogs.isBlank()) {
+                        newLogsByPod.put(podName, newLogs);
+                    }
+                }
+            });
+
+        return newLogsByPod;
+    }
+
+    /**
+     * Hämtar loggrader producerade sedan angiven tidpunkt.
+     * Används för effektiv inkrementell hämtning under en pågående SSE-ström.
+     */
+    public Map<String, String> readExecutionLogsSinceTime(String namespace, String jobName, Instant sinceTime) {
+        if (sinceTime == null) {
+            return readExecutionLogs(namespace, jobName, null);
+        }
+
+        String since = DateTimeFormatter.ISO_INSTANT.format(sinceTime);
+        var podList = client.pods().inNamespace(namespace).withLabel("job-name", jobName).list();
+        Map<String, String> logsByPod = new LinkedHashMap<>();
+
+        podList.getItems().stream()
+            .filter(pod -> pod != null && pod.getMetadata() != null && pod.getMetadata().getName() != null)
+            .map(pod -> pod.getMetadata().getName())
+            .sorted(Comparator.naturalOrder())
+            .forEach(podName -> {
+                String logOutput = client.pods().inNamespace(namespace).withName(podName).sinceTime(since).getLog();
+                if (logOutput != null && !logOutput.isBlank()) {
+                    logsByPod.put(podName, logOutput);
+                }
             });
 
         return logsByPod;
