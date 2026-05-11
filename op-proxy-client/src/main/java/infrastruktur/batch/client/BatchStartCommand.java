@@ -86,6 +86,9 @@ public class BatchStartCommand implements Callable<Integer> {
     @Option(names = {"--logs-tail-lines"}, description = "Max antal loggrader per pod (standard: alla)")
     private Integer logsTailLines;
 
+    @Option(names = {"--namespace"}, defaultValue = "default", description = "Kubernetes-namespace (standard: default)")
+    private String kubeNamespace;
+
     public static void main(String[] args) {
         System.exit(new CommandLine(new BatchStartCommand()).execute(args));
     }
@@ -120,7 +123,8 @@ public class BatchStartCommand implements Callable<Integer> {
                     blankToNull(clientRequestId),
                     timeoutSeconds,
                     jobParams.isEmpty() ? null : jobParams
-                )
+                ),
+                kubeNamespace
             );
 
             String executionName = started.executionName();
@@ -164,7 +168,7 @@ public class BatchStartCommand implements Callable<Integer> {
             throws Exception {
         Instant started = Instant.now();
         while (true) {
-            ExecutionStatusResponseVO status = client.status(executionName);
+            ExecutionStatusResponseVO status = client.status(executionName, kubeNamespace);
             System.out.printf("Status: fas=%s executionName=%s%n", status.phase(), executionName);
 
             int code = phaseToExitCode(status.phase());
@@ -192,7 +196,7 @@ public class BatchStartCommand implements Callable<Integer> {
         // exitCode[0] används som muterbar int i lambda
         int[] exitCode = {4};
 
-        client.stream(executionName, intervalSeconds, event -> {
+        client.stream(executionName, intervalSeconds, kubeNamespace, event -> {
             switch (event.type()) {
                 case "status" -> System.out.printf(
                     "Status: fas=%s (aktiva=%d lyckade=%d misslyckade=%d)%n",
@@ -223,7 +227,7 @@ public class BatchStartCommand implements Callable<Integer> {
     private void printLogs(OpProxyApiClient client, String executionName) {
         System.out.printf("--- Loggar för körning %s ---%n", executionName);
         try {
-            ExecutionLogsResponseVO logs = client.logs(executionName, logsTailLines);
+            ExecutionLogsResponseVO logs = client.logs(executionName, logsTailLines, kubeNamespace);
             if (logs.logsByPod() != null) {
                 for (Map.Entry<String, String> entry : logs.logsByPod().entrySet()) {
                     System.out.printf("[%s]%n%s%n", entry.getKey(), entry.getValue());
@@ -245,7 +249,7 @@ public class BatchStartCommand implements Callable<Integer> {
             }
             System.err.println("\nAvbruten – skickar stop för körning " + name + " …");
             try (OpProxyApiClient hookClient = new OpProxyApiClient(baseUrl)) {
-                hookClient.stop(name);
+                hookClient.stop(name, kubeNamespace);
                 System.err.println("Stop-anrop skickat.");
             } catch (Exception ex) {
                 System.err.println("Varning: stop-anrop misslyckades: " + ex.getMessage());

@@ -44,6 +44,7 @@ Exempel (standard polling):
 ```bash
 java -jar op-proxy-client/build/libs/op-proxy-client-0.1.0.jar my-template \
   --base-url http://localhost:8080 \
+  --namespace prod \
   -p FOO=bar -p BATCH_SIZE=100
 ```
 
@@ -52,12 +53,14 @@ Exempel (SSE-strömning):
 ```bash
 java -jar op-proxy-client/build/libs/op-proxy-client-0.1.0.jar my-template \
   --base-url http://localhost:8080 \
+  --namespace prod \
   --sse --interval-seconds 3
 ```
 
 ## Vanliga flaggor
 
 - `--base-url` bas-URL till `op-proxy-app` (default: `http://localhost:8080` eller miljövariabel `OP_PROXY_BASE_URL`)
+- `--namespace` Kubernetes-namespace (default: `default`)
 - `--client-request-id` valfritt klient-id som skickas med i startanropet
 - `--timeout-seconds` sätter körningens timeout
 - `-p`, `--parameter` template-parameter i format `NAME=VALUE` (kan anges flera gånger)

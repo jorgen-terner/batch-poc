@@ -52,10 +52,12 @@ public class TemplateExecutionResource {
     @Path("api/templates/{templateName}/start")
     public ExecutionActionResponseVO start(
         @jakarta.ws.rs.PathParam("templateName") String templateName,
+        @QueryParam("namespace") String overrideNamespace,
         String rawRequestBody
     ) {
         StartExecutionRequestVO request = deserializeStartRequest(rawRequestBody);
-        return templateExecutionService.start(namespace, templateName, request);
+        String effectiveNamespace = overrideNamespace != null && !overrideNamespace.isBlank() ? overrideNamespace : namespace;
+        return templateExecutionService.start(effectiveNamespace, templateName, request);
     }
 
     private StartExecutionRequestVO deserializeStartRequest(String rawRequestBody) {
@@ -72,17 +74,23 @@ public class TemplateExecutionResource {
 
     @GET
     @Path("api/executions/{executionName}")
-    public ExecutionStatusResponseVO status(@jakarta.ws.rs.PathParam("executionName") String executionName) {
-        return templateExecutionService.status(namespace, executionName);
+    public ExecutionStatusResponseVO status(
+        @jakarta.ws.rs.PathParam("executionName") String executionName,
+        @QueryParam("namespace") String overrideNamespace
+    ) {
+        String effectiveNamespace = overrideNamespace != null && !overrideNamespace.isBlank() ? overrideNamespace : namespace;
+        return templateExecutionService.status(effectiveNamespace, executionName);
     }
 
     @GET
     @Path("api/executions/{executionName}/logs")
     public ExecutionLogsResponseVO logs(
         @jakarta.ws.rs.PathParam("executionName") String executionName,
-        @QueryParam("tailLines") Integer tailLines
+        @QueryParam("tailLines") Integer tailLines,
+        @QueryParam("namespace") String overrideNamespace
     ) {
-        return templateExecutionService.logs(namespace, executionName, tailLines);
+        String effectiveNamespace = overrideNamespace != null && !overrideNamespace.isBlank() ? overrideNamespace : namespace;
+        return templateExecutionService.logs(effectiveNamespace, executionName, tailLines);
     }
 
     @GET
@@ -91,16 +99,22 @@ public class TemplateExecutionResource {
     @RestSseElementType(MediaType.APPLICATION_JSON)
     public Multi<ExecutionStreamEventVO> stream(
         @jakarta.ws.rs.PathParam("executionName") String executionName,
-        @QueryParam("intervalSeconds") @DefaultValue("3") int intervalSeconds
+        @QueryParam("intervalSeconds") @DefaultValue("3") int intervalSeconds,
+        @QueryParam("namespace") String overrideNamespace
         // intervalSeconds måste vara >= 1; valideras i service, returnerar 400 om det bryts
     ) {
-        return templateExecutionService.streamExecution(namespace, executionName, intervalSeconds);
+        String effectiveNamespace = overrideNamespace != null && !overrideNamespace.isBlank() ? overrideNamespace : namespace;
+        return templateExecutionService.streamExecution(effectiveNamespace, executionName, intervalSeconds);
     }
 
     @POST
     @Path("api/executions/{executionName}/stop")
-    public ExecutionActionResponseVO stop(@jakarta.ws.rs.PathParam("executionName") String executionName) {
-        return templateExecutionService.stop(namespace, executionName);
+    public ExecutionActionResponseVO stop(
+        @jakarta.ws.rs.PathParam("executionName") String executionName,
+        @QueryParam("namespace") String overrideNamespace
+    ) {
+        String effectiveNamespace = overrideNamespace != null && !overrideNamespace.isBlank() ? overrideNamespace : namespace;
+        return templateExecutionService.stop(effectiveNamespace, executionName);
     }
 }
 

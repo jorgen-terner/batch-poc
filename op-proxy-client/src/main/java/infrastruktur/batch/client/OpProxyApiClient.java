@@ -39,11 +39,15 @@ public class OpProxyApiClient implements AutoCloseable {
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     }
 
-    public ExecutionActionResponseVO start(String templateName, StartExecutionRequestVO request)
+    public ExecutionActionResponseVO start(String templateName, StartExecutionRequestVO request, String namespace)
             throws IOException, InterruptedException {
         String body = mapper.writeValueAsString(request);
+        String url = baseUrl + "/api/templates/" + templateName + "/start";
+        if (namespace != null && !namespace.isBlank()) {
+            url += "?namespace=" + namespace;
+        }
         HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(baseUrl + "/api/templates/" + templateName + "/start"))
+            .uri(URI.create(url))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(body))
@@ -51,31 +55,44 @@ public class OpProxyApiClient implements AutoCloseable {
         return execute(req, ExecutionActionResponseVO.class);
     }
 
-    public ExecutionStatusResponseVO status(String executionName)
+    public ExecutionStatusResponseVO status(String executionName, String namespace)
             throws IOException, InterruptedException {
+        String url = baseUrl + "/api/executions/" + executionName;
+        if (namespace != null && !namespace.isBlank()) {
+            url += "?namespace=" + namespace;
+        }
         HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(baseUrl + "/api/executions/" + executionName))
+            .uri(URI.create(url))
             .header("Accept", "application/json")
             .GET()
             .build();
         return execute(req, ExecutionStatusResponseVO.class);
     }
 
-    public ExecutionActionResponseVO stop(String executionName)
+    public ExecutionActionResponseVO stop(String executionName, String namespace)
             throws IOException, InterruptedException {
+        String url = baseUrl + "/api/executions/" + executionName + "/stop";
+        if (namespace != null && !namespace.isBlank()) {
+            url += "?namespace=" + namespace;
+        }
         HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(baseUrl + "/api/executions/" + executionName + "/stop"))
+            .uri(URI.create(url))
             .header("Accept", "application/json")
             .POST(HttpRequest.BodyPublishers.noBody())
             .build();
         return execute(req, ExecutionActionResponseVO.class);
     }
 
-    public ExecutionLogsResponseVO logs(String executionName, Integer tailLines)
+    public ExecutionLogsResponseVO logs(String executionName, Integer tailLines, String namespace)
             throws IOException, InterruptedException {
         String url = baseUrl + "/api/executions/" + executionName + "/logs";
+        boolean hasParam = false;
+        if (namespace != null && !namespace.isBlank()) {
+            url += "?namespace=" + namespace;
+            hasParam = true;
+        }
         if (tailLines != null) {
-            url += "?tailLines=" + tailLines;
+            url += (hasParam ? "&" : "?") + "tailLines=" + tailLines;
         }
         HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(url))
@@ -93,9 +110,12 @@ public class OpProxyApiClient implements AutoCloseable {
      * <p>SSE-format (RFC): en eller flera rader av typen {@code data: <json>} per händelse,
      * händelser separeras med tomrader. Övriga fält (event:, id:, retry:) ignoreras.
      */
-    public void stream(String executionName, int intervalSeconds, Consumer<ExecutionStreamEventVO> onEvent)
+    public void stream(String executionName, int intervalSeconds, String namespace, Consumer<ExecutionStreamEventVO> onEvent)
             throws IOException, InterruptedException {
         String url = baseUrl + "/api/executions/" + executionName + "/stream?intervalSeconds=" + intervalSeconds;
+        if (namespace != null && !namespace.isBlank()) {
+            url += "&namespace=" + namespace;
+        }
         HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .header("Accept", "text/event-stream")
