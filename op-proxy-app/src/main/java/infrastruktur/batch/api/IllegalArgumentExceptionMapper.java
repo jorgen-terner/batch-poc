@@ -10,8 +10,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Maps IllegalArgumentException to structured 400 Bad Request response.
- * Used by resource methods that validate request bodies or parameters.
+ * Mappar IllegalArgumentException till ett strukturerat 400 Bad Request-svar.
+ * Används av resource-metoder som validerar request bodies eller parametrar.
  */
 @Provider
 public class IllegalArgumentExceptionMapper implements ExceptionMapper<IllegalArgumentException> {

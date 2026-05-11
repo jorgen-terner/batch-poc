@@ -11,8 +11,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Maps TemplateProcessingException to 422 Unprocessable Entity.
- * Thrown when template processing fails (template not found, invalid template format, etc.).
+ * Mappar TemplateProcessingException till 422 Unprocessable Entity.
+ * Kastas när template processing misslyckas (template saknas, ogiltigt format o.s.v.).
  */
 @Provider
 public class TemplateProcessingExceptionMapper implements ExceptionMapper<TemplateProcessingException> {

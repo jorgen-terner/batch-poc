@@ -11,8 +11,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Maps KubernetesClientException to appropriate HTTP response.
- * Distinguishes between conflict (409 when resource exists) and gateway errors (502).
+ * Mappar KubernetesClientException till lämpligt HTTP-svar.
+ * Särskiljer konflikt (409 när resursen redan finns) från gateway-fel (502).
  */
 @Provider
 public class KubernetesClientExceptionMapper implements ExceptionMapper<KubernetesClientException> {

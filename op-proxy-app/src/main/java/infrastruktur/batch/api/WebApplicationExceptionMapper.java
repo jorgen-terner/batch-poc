@@ -11,8 +11,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Maps generic WebApplicationException to structured error response.
- * Handles unexpected web framework errors without leaking internal detail.
+ * Mappar generiska WebApplicationException till strukturerade felsvar.
+ * Hanterar oväntade webbramverksfel utan att läcka intern information.
  */
 @Provider
 public class WebApplicationExceptionMapper implements ExceptionMapper<WebApplicationException> {

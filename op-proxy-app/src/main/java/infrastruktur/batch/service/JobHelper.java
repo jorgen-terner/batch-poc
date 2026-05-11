@@ -14,7 +14,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Shared stateless helpers used by execution services.
+ * Delade tillståndslösa hjälpmetoder som används av execution-tjänsterna.
  */
 final class JobHelper {
 

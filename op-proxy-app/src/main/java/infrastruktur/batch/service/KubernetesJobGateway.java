@@ -41,7 +41,7 @@ public class KubernetesJobGateway {
         "batch.kubernetes.io/job-name"
     );
 
-    // Conservatively map only clearly non-recoverable startup reasons to FAILED early.
+    // Mappa enbart tydligt oåterkalleliga startorsaker till FAILED tidigt.
     private static final Set<String> IRRECOVERABLE_WAITING_REASONS = Set.of(
         "ImagePullBackOff",
         "ErrImagePull",
@@ -240,7 +240,7 @@ public class KubernetesJobGateway {
         if (parameters != null && !parameters.isEmpty()) {
             templateParameters.putAll(parameters);
         }
-        // Keep namespace fixed to runtime namespace even if a request parameter tries to override it.
+        // Lås namespace till runtime-namespacet även om en request-parameter försöker åsidosätta det.
         templateParameters.put("NAMESPACE", namespace);
         KubernetesList processed;
         try {

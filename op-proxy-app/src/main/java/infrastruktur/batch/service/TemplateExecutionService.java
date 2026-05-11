@@ -158,8 +158,8 @@ public class TemplateExecutionService {
         if (intervalSeconds < 1) {
             throw new IllegalArgumentException("intervalSeconds måste vara >= 1");
         }
-        // Fail-fast: verify the job exists before opening the SSE stream.
-        // The job may disappear later during the loop; that is handled gracefully below.
+        // Fail-fast: kontrollera att jobbet finns innan SSE-strömmen öppnas.
+        // Jobbet kan försvinna senare under loopen; det hanteras gracefully nedan.
         kubernetesJobGateway.requireJob(namespace, executionName);
         long pollMillis = (long) intervalSeconds * 1000L;
 
@@ -218,7 +218,7 @@ public class TemplateExecutionService {
         Job executionJob = kubernetesJobGateway.requireJob(namespace, executionName);
         String templateName = resolveTemplateName(executionJob);
 
-        // Best-effort stop signal before stopping execution.
+        // Best-effort stopsignal innan körningen avslutas.
         try {
             kubernetesJobGateway.patchSuspend(namespace, executionName, true);
         } catch (KubernetesClientException ex) {

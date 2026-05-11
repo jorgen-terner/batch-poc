@@ -10,8 +10,8 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Catch-all mapper for unexpected exceptions. Should not be reached in normal operation.
- * Logs full context to help diagnose issues.
+ * Catch-all-mapper för oväntade undantag. Bör inte nås under normal drift.
+ * Loggar fullständig kontext för att underlätta felsökning.
  */
 @Provider
 public class GenericExceptionMapper implements ExceptionMapper<Exception> {

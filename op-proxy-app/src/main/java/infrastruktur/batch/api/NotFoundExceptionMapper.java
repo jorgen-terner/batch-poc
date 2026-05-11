@@ -11,8 +11,8 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 
 /**
- * Maps NoSuchElementException to structured 404 Not Found response.
- * Typically thrown when a required resource (job, execution, etc.) cannot be found.
+ * Mappar NoSuchElementException till ett strukturerat 404 Not Found-svar.
+ * Kastas vanligtvis när en begärd resurs (jobb, körning o.s.v.) inte kan hittas.
  */
 @Provider
 public class NotFoundExceptionMapper implements ExceptionMapper<NoSuchElementException> {

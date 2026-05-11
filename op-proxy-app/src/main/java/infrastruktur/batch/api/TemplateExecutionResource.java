@@ -60,7 +60,7 @@ public class TemplateExecutionResource {
 
     private StartExecutionRequestVO deserializeStartRequest(String rawRequestBody) {
         if (rawRequestBody == null || rawRequestBody.isBlank()) {
-            return null;  // Empty body is OK for start; all fields are optional
+            return null;  // Tom request body är tillåten för start; alla fält är valfria
         }
         try {
             return objectMapper.readValue(rawRequestBody, StartExecutionRequestVO.class);
@@ -92,7 +92,7 @@ public class TemplateExecutionResource {
     public Multi<ExecutionStreamEventVO> stream(
         @jakarta.ws.rs.PathParam("executionName") String executionName,
         @QueryParam("intervalSeconds") @DefaultValue("3") int intervalSeconds
-        // intervalSeconds must be >= 1; validated in service, returns 400 if violated
+        // intervalSeconds måste vara >= 1; valideras i service, returnerar 400 om det bryts
     ) {
         return templateExecutionService.streamExecution(namespace, executionName, intervalSeconds);
     }

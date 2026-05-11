@@ -20,7 +20,7 @@ public class Slf4jJobMetricsReporter implements JobMetricsReporter {
         Map<String, String> attributes
     ) {
         LOG.info(
-            "Forwarding generic metrics event: namespace={}, scope={}, name={}, status={}, metrics={}, attributes={}",
+            "Vidarebefordrar generell metrics-händelse: namespace={}, scope={}, name={}, status={}, metrics={}, attributes={}",
             namespace,
             scope,
             name,
