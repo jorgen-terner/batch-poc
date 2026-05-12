@@ -33,6 +33,15 @@ Byggd fat-jar hamnar i:
 
 ## Kör klienten
 
+Via wrapper-script:
+
+```bash
+./op-proxy-client/bin/start-client.sh <templateName> [flaggor]
+```
+
+Scriptet hittar automatiskt senaste byggda `op-proxy-client-*.jar` i `build/libs/`.
+Du kan även peka ut en specifik jar via miljövariabeln `OP_PROXY_CLIENT_JAR`.
+
 Grundformat:
 
 ```bash
