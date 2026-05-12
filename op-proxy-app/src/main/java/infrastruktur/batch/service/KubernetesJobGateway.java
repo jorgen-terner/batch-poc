@@ -188,9 +188,14 @@ public class KubernetesJobGateway {
             .map(pod -> pod.getMetadata().getName())
             .sorted(Comparator.naturalOrder())
             .forEach(podName -> {
-                String logOutput = client.pods().inNamespace(namespace).withName(podName).sinceTime(since).getLog();
-                if (logOutput != null && !logOutput.isBlank()) {
-                    logsByPod.put(podName, logOutput);
+                try {
+                    String logOutput = client.pods().inNamespace(namespace).withName(podName).sinceTime(since).getLog();
+                    if (logOutput != null && !logOutput.isBlank()) {
+                        logsByPod.put(podName, logOutput);
+                    }
+                } catch (KubernetesClientException ex) {
+                    LOG.warn("Kunde inte läsa loggar för pod {}/{} sedan {}: {}",
+                        namespace, podName, since, ex.getMessage());
                 }
             });
 

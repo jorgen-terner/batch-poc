@@ -229,11 +229,18 @@ public class TemplateExecutionService {
                 emitter.emit(ExecutionStreamEventVO.status(s, cursorValue));
 
                 Instant readFrom = cursor[0].minusMillis(STREAM_OVERLAP_MILLIS);
-                Map<String, String> newLogsByPod = kubernetesJobGateway.readExecutionLogsSinceTime(
-                    namespace,
-                    executionName,
-                    readFrom
-                );
+                Map<String, String> newLogsByPod;
+                try {
+                    newLogsByPod = kubernetesJobGateway.readExecutionLogsSinceTime(
+                        namespace,
+                        executionName,
+                        readFrom
+                    );
+                } catch (KubernetesClientException ex) {
+                    LOG.warn("Tillfälligt Kubernetes-fel vid loggströmning av {}/{}, fortsätter utan loggar i denna poll: {}",
+                        namespace, executionName, ex.getMessage());
+                    newLogsByPod = Map.of();
+                }
                 cursor[0] = upperBound;
 
                 newLogsByPod.forEach((pod, output) -> {
