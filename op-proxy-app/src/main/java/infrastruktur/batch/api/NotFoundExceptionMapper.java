@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 
 /**
- * Mappar NoSuchElementException till ett strukturerat 404 Not Found-svar.
+ * Mappar NoSuchElementException till ett strukturerat 404-svar.
  * Kastas vanligtvis när en begärd resurs (jobb, körning o.s.v.) inte kan hittas.
  */
 @Provider

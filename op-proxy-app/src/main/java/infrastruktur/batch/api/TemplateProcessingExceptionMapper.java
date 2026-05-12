@@ -12,7 +12,7 @@ import java.util.Map;
 
 /**
  * Mappar TemplateProcessingException till 422 Unprocessable Entity.
- * Kastas när template processing misslyckas (template saknas, ogiltigt format o.s.v.).
+ * Kastas när behandling av template misslyckas (template saknas, ogiltigt format o.s.v.).
  */
 @Provider
 public class TemplateProcessingExceptionMapper implements ExceptionMapper<TemplateProcessingException> {
@@ -20,12 +20,12 @@ public class TemplateProcessingExceptionMapper implements ExceptionMapper<Templa
 
     @Override
     public Response toResponse(TemplateProcessingException exception) {
-        LOG.warn("Template processing misslyckades: {}", exception.getMessage());
-        String message = exception.getMessage() != null ? exception.getMessage() : "Template processing misslyckades";
+        LOG.warn("Behandling av template misslyckades: {}", exception.getMessage());
+        String message = exception.getMessage() != null ? exception.getMessage() : "Behandling av template misslyckades";
         return Response.status(422)
             .type(MediaType.APPLICATION_JSON)
             .entity(Map.of(
-                "error", "Template processing misslyckades",
+                "error", "Behandling av template misslyckades",
                 "code", "TEMPLATE_PROCESSING_ERROR",
                 "message", message
             ))

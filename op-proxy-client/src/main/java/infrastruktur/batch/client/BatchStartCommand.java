@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li>3   – SUSPENDED</li>
  *   <li>4   – UNKNOWN eller oväntat läge</li>
  *   <li>10  – Aktiv (internt, returneras ej till anroparen)</li>
- *   <li>124 – Timeout i watch-läge</li>
+ *   <li>124 – Timeout i bevakningsläge</li>
  *   <li>130 – Avbruten (SIGINT)</li>
  *   <li>1   – Konfigurationsfel eller nätverksfel</li>
  * </ul>
@@ -239,7 +239,7 @@ public class BatchStartCommand implements Callable<Integer> {
                     }
                 });
                 if (!completed[0]) {
-                    System.err.println("Varning: SSE-strömmen avslutades utan done-event, försöker återansluta...");
+                    System.err.println("Varning: SSE-strömmen avslutades utan done-händelse, försöker återansluta...");
                     Thread.sleep(Math.max(1000L, intervalSeconds * 1000L));
                 }
             } catch (InterruptedException ex) {

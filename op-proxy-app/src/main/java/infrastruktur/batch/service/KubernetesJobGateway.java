@@ -62,7 +62,7 @@ public class KubernetesJobGateway {
     public Job requireJob(String namespace, String jobName) {
         Job job = client.batch().v1().jobs().inNamespace(namespace).withName(jobName).get();
         if (job == null) {
-            throw new NoSuchElementException("Job not found: " + namespace + "/" + jobName);
+            throw new NoSuchElementException("Job hittades inte: " + namespace + "/" + jobName);
         }
         return job;
     }
@@ -290,11 +290,11 @@ public class KubernetesJobGateway {
     private Job loadJobFromTemplate(String namespace, String templateName, Map<String, String> parameters) {
         Job jobFromTemplate = processOpenShiftTemplate(namespace, templateName, parameters);
         if (jobFromTemplate != null) {
-            LOG.info("Loaded Job from OpenShift Template: {}/{}", namespace, templateName);
+            LOG.info("Läste in job från OpenShift template: {}/{}", namespace, templateName);
             return jobFromTemplate;
         }
 
-        throw new TemplateProcessingException("Template not found: " + namespace + "/" + templateName);
+        throw new TemplateProcessingException("Template hittades inte: " + namespace + "/" + templateName);
     }
 
     private Job processOpenShiftTemplate(String namespace, String templateName, Map<String, String> parameters) {
@@ -318,7 +318,7 @@ public class KubernetesJobGateway {
             if (!shouldFallbackToLocalProcessing(ex)) {
                 throw ex;
             }
-            LOG.debug("Server-side template processing misslyckades för {}/{} ({}), försöker local processing",
+            LOG.debug("Serverbaserad behandling av template misslyckades för {}/{} ({}), försöker lokal behandling",
                 namespace, templateName, ex.getMessage());
             processed = templateResource.processLocally(templateParameters);
         }
@@ -333,7 +333,7 @@ public class KubernetesJobGateway {
             return client.adapt(OpenShiftClient.class);
         } catch (KubernetesClientException ex) {
             throw new TemplateProcessingException(
-                "OpenShift client API is not available from current Kubernetes client: " + ex.getMessage(),
+                "OpenShift client API är inte tillgängligt från aktuell Kubernetes client: " + ex.getMessage(),
                 ex
             );
         }
@@ -359,21 +359,21 @@ public class KubernetesJobGateway {
 
     private Job extractSingleJobFromProcessedList(KubernetesList processed) {
         if (processed == null || processed.getItems() == null) {
-            throw new TemplateProcessingException("Processed template did not return any resources");
+            throw new TemplateProcessingException("Processad template returnerade inga resurser");
         }
 
         Job foundJob = null;
         for (HasMetadata item : processed.getItems()) {
             if (item instanceof Job job) {
                 if (foundJob != null) {
-                    throw new TemplateProcessingException("Processed template must contain exactly one Job");
+                    throw new TemplateProcessingException("Processad template måste innehålla exakt ett job");
                 }
                 foundJob = job;
             }
         }
 
         if (foundJob == null) {
-            throw new TemplateProcessingException("Processed template does not contain a Job");
+            throw new TemplateProcessingException("Processad template innehåller inget job");
         }
 
         return foundJob;
@@ -381,20 +381,20 @@ public class KubernetesJobGateway {
 
     private void validateJobStructure(Job job) {
         if (job == null) {
-            throw new TemplateProcessingException("Job object is null");
+            throw new TemplateProcessingException("Job-objektet är null");
         }
         if (job.getMetadata() == null || job.getMetadata().getName() == null) {
-            throw new TemplateProcessingException("Job must have metadata.name");
+            throw new TemplateProcessingException("Job måste ha metadata.name");
         }
         if (job.getSpec() == null) {
-            throw new TemplateProcessingException("Job must have spec defined");
+            throw new TemplateProcessingException("Job måste ha spec definierad");
         }
         if (job.getSpec().getTemplate() == null || job.getSpec().getTemplate().getSpec() == null) {
-            throw new TemplateProcessingException("Job must have spec.template.spec defined");
+            throw new TemplateProcessingException("Job måste ha spec.template.spec definierad");
         }
         if (job.getSpec().getTemplate().getSpec().getContainers() == null 
             || job.getSpec().getTemplate().getSpec().getContainers().isEmpty()) {
-            throw new TemplateProcessingException("Job must define at least one container in spec.template.spec.containers");
+            throw new TemplateProcessingException("Job måste definiera minst en container i spec.template.spec.containers");
         }
     }
 
@@ -440,7 +440,7 @@ public class KubernetesJobGateway {
     private String extractRequiredJobName(Job job) {
         String name = job == null || job.getMetadata() == null ? null : job.getMetadata().getName();
         if (name == null || name.isBlank()) {
-            throw new TemplateProcessingException("Template Job must define metadata.name");
+            throw new TemplateProcessingException("Template job måste definiera metadata.name");
         }
         return name;
     }

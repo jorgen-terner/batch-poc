@@ -415,13 +415,13 @@ public class TemplateExecutionService {
     private String resolveTemplateName(Job executionJob) {
         var meta = executionJob.getMetadata();
         if (meta == null || meta.getLabels() == null) {
-            LOG.warn("Körning {} saknar metadata eller labels - kan inte avgöra template name",
-                meta != null ? meta.getName() : "<unknown>");
+            LOG.warn("Körning {} saknar metadata eller labels - kan inte avgöra template-namn",
+                meta != null ? meta.getName() : "<okänd>");
             return "UNKNOWN";
         }
         String labelValue = meta.getLabels().get(KubernetesJobGateway.TEMPLATE_NAME_LABEL);
         if (labelValue == null || labelValue.isBlank()) {
-            LOG.warn("Körning {} saknar label '{}' - kan inte avgöra template name",
+            LOG.warn("Körning {} saknar label '{}' - kan inte avgöra template-namn",
                 meta.getName(), KubernetesJobGateway.TEMPLATE_NAME_LABEL);
             return "UNKNOWN";
         }

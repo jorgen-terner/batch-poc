@@ -181,13 +181,13 @@ public final class BatchJobCli implements Runnable {
         @Parameters(index = "0", description = "Körningsnamn")
         private String executionName;
 
-        @Option(names = {"-w", "--watch"}, description = "Polla status tills SUCCEEDED eller FAILED")
+        @Option(names = {"-w", "--watch"}, description = "Polla status tills SUCCEEDED eller FAILED har nåtts")
         private boolean watch;
 
         @Option(names = {"--interval-seconds"}, defaultValue = "5", description = "Pollningsintervall när --watch är aktiverat")
         private long intervalSeconds;
 
-        @Option(names = {"--timeout-seconds"}, description = "Valfri timeout för watch-läge")
+        @Option(names = {"--timeout-seconds"}, description = "Valfri timeout för bevakningsläge")
         private Long timeoutSeconds;
 
         @Override
@@ -293,7 +293,7 @@ public final class BatchJobCli implements Runnable {
             Thread.sleep(millis);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Avbruten under väntan i watch-läge", ex);
+            throw new IllegalStateException("Avbruten under väntan i bevakningsläge", ex);
         }
     }
 }
