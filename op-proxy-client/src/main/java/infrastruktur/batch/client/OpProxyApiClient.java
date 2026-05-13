@@ -1,7 +1,7 @@
 package infrastruktur.batch.client;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import infrastruktur.batch.client.model.ExecutionActionResponseVO;
 import infrastruktur.batch.client.model.ExecutionLogsResponseVO;
@@ -9,17 +9,21 @@ import infrastruktur.batch.client.model.ExecutionStatusResponseVO;
 import infrastruktur.batch.client.model.ExecutionStreamEventVO;
 import infrastruktur.batch.client.model.StartExecutionRequestVO;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
+import java.net.URL;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.function.Consumer;
 
 /**
- * HTTP-klient för op-proxy-app. Använder java.net.http.HttpClient (inga externa beroenden).
+ * HTTP-klient för op-proxy-app.
  *
  * <p>SSE-strömning: läser {@code text/event-stream} rad för rad och anropar onEvent per händelse.
  * Blockerar tills servern stänger strömmen (dvs. när en {@code done}-händelse tas emot).
@@ -27,14 +31,10 @@ import java.util.function.Consumer;
 public class OpProxyApiClient implements AutoCloseable {
 
     private final String baseUrl;
-    private final HttpClient http;
     private final ObjectMapper mapper;
 
     public OpProxyApiClient(String baseUrl) {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        this.http = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
         this.mapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -44,63 +44,42 @@ public class OpProxyApiClient implements AutoCloseable {
             throws IOException, InterruptedException {
         String body = mapper.writeValueAsString(request);
         String url = baseUrl + "/api/templates/" + templateName + "/start";
-        if (namespace != null && !namespace.isBlank()) {
+        if (namespace != null && !namespace.trim().isEmpty()) {
             url += "?namespace=" + namespace;
         }
-        HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(body))
-            .build();
-        return execute(req, ExecutionActionResponseVO.class);
+        return execute(url, "POST", body, "application/json", "application/json", ExecutionActionResponseVO.class);
     }
 
     public ExecutionStatusResponseVO status(String executionName, String namespace)
             throws IOException, InterruptedException {
         String url = baseUrl + "/api/executions/" + executionName;
-        if (namespace != null && !namespace.isBlank()) {
+        if (namespace != null && !namespace.trim().isEmpty()) {
             url += "?namespace=" + namespace;
         }
-        HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Accept", "application/json")
-            .GET()
-            .build();
-        return execute(req, ExecutionStatusResponseVO.class);
+        return execute(url, "GET", null, null, "application/json", ExecutionStatusResponseVO.class);
     }
 
     public ExecutionActionResponseVO stop(String executionName, String namespace)
             throws IOException, InterruptedException {
         String url = baseUrl + "/api/executions/" + executionName + "/stop";
-        if (namespace != null && !namespace.isBlank()) {
+        if (namespace != null && !namespace.trim().isEmpty()) {
             url += "?namespace=" + namespace;
         }
-        HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Accept", "application/json")
-            .POST(HttpRequest.BodyPublishers.noBody())
-            .build();
-        return execute(req, ExecutionActionResponseVO.class);
+        return execute(url, "POST", "", null, "application/json", ExecutionActionResponseVO.class);
     }
 
     public ExecutionLogsResponseVO logs(String executionName, Integer tailLines, String namespace)
             throws IOException, InterruptedException {
         String url = baseUrl + "/api/executions/" + executionName + "/logs";
         boolean hasParam = false;
-        if (namespace != null && !namespace.isBlank()) {
+        if (namespace != null && !namespace.trim().isEmpty()) {
             url += "?namespace=" + namespace;
             hasParam = true;
         }
         if (tailLines != null) {
             url += (hasParam ? "&" : "?") + "tailLines=" + tailLines;
         }
-        HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Accept", "application/json")
-            .GET()
-            .build();
-        return execute(req, ExecutionLogsResponseVO.class);
+        return execute(url, "GET", null, null, "application/json", ExecutionLogsResponseVO.class);
     }
 
     /**
@@ -127,57 +106,102 @@ public class OpProxyApiClient implements AutoCloseable {
             Consumer<ExecutionStreamEventVO> onEvent)
             throws IOException, InterruptedException {
         String url = baseUrl + "/api/executions/" + executionName + "/stream?intervalSeconds=" + intervalSeconds;
-        if (namespace != null && !namespace.isBlank()) {
+        if (namespace != null && !namespace.trim().isEmpty()) {
             url += "&namespace=" + namespace;
         }
-        if (since != null && !since.isBlank()) {
-            url += "&since=" + java.net.URLEncoder.encode(since, StandardCharsets.UTF_8);
+        if (since != null && !since.trim().isEmpty()) {
+            url += "&since=" + URLEncoder.encode(since, "UTF-8");
         }
-        HttpRequest req = HttpRequest.newBuilder()
-            .uri(URI.create(url))
-            .header("Accept", "text/event-stream")
-            .GET()
-            .build();
-
-        HttpResponse<java.util.stream.Stream<String>> response =
-            http.send(req, HttpResponse.BodyHandlers.ofLines());
-
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new ApiException(response.statusCode(),
+        HttpURLConnection connection = openConnection(url, "GET", null, "text/event-stream");
+        int status = connection.getResponseCode();
+        if (status < 200 || status >= 300) {
+            throw new ApiException(status,
                 "SSE-strömningsbegäran misslyckades för körning: " + executionName);
         }
 
         StringBuilder dataBuffer = new StringBuilder();
-        try (var lines = response.body()) {
-            for (String line : (Iterable<String>) lines::iterator) {
+        try (InputStream bodyStream = connection.getInputStream();
+             BufferedReader lines = new BufferedReader(new InputStreamReader(bodyStream, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = lines.readLine()) != null) {
                 if (Thread.currentThread().isInterrupted()) {
                     Thread.currentThread().interrupt();
                     return;
                 }
                 if (line.startsWith("data:")) {
-                    String data = line.substring(5).strip();
+                    String data = line.substring(5).trim();
                     if (!data.isEmpty()) {
                         dataBuffer.append(data);
                     }
-                } else if (line.isBlank() && dataBuffer.length() > 0) {
+                } else if (line.trim().isEmpty() && dataBuffer.length() > 0) {
                     // Tomrad = slutet på en SSE-händelse
-                    ExecutionStreamEventVO event =
-                        mapper.readValue(dataBuffer.toString(), ExecutionStreamEventVO.class);
+                    ExecutionStreamEventVO event = mapper.readValue(dataBuffer.toString(), ExecutionStreamEventVO.class);
                     dataBuffer.setLength(0);
                     onEvent.accept(event);
                 }
                 // Övriga SSE-fält (event:, id:, retry:) ignoreras avsiktligt
             }
+        } finally {
+            connection.disconnect();
         }
     }
 
-    private <T> T execute(HttpRequest req, Class<T> responseType)
+    private <T> T execute(String url, String method, String body, String contentType, String accept, Class<T> responseType)
             throws IOException, InterruptedException {
-        HttpResponse<String> response = http.send(req, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new ApiException(response.statusCode(), extractErrorMessage(response.body()));
+        HttpURLConnection connection = openConnection(url, method, contentType, accept);
+        try {
+            if (body != null) {
+                connection.setDoOutput(true);
+                byte[] payload = body.getBytes(StandardCharsets.UTF_8);
+                connection.setFixedLengthStreamingMode(payload.length);
+                try (OutputStream out = connection.getOutputStream()) {
+                    out.write(payload);
+                }
+            }
+
+            int status = connection.getResponseCode();
+            String responseBody = readResponseBody(connection, status);
+
+            if (status < 200 || status >= 300) {
+                throw new ApiException(status, extractErrorMessage(responseBody));
+            }
+            return mapper.readValue(responseBody, responseType);
+        } finally {
+            connection.disconnect();
         }
-        return mapper.readValue(response.body(), responseType);
+    }
+
+    private HttpURLConnection openConnection(String url, String method, String contentType, String accept)
+            throws IOException {
+        URL parsedUrl = URI.create(url).toURL();
+        HttpURLConnection connection = (HttpURLConnection) parsedUrl.openConnection();
+        connection.setRequestMethod(method);
+        connection.setConnectTimeout(10_000);
+        connection.setReadTimeout(30_000);
+        if (accept != null) {
+            connection.setRequestProperty("Accept", accept);
+        }
+        if (contentType != null) {
+            connection.setRequestProperty("Content-Type", contentType);
+        }
+        return connection;
+    }
+
+    private String readResponseBody(HttpURLConnection connection, int status) throws IOException {
+        InputStream stream = status >= 200 && status < 300
+                ? connection.getInputStream()
+                : connection.getErrorStream();
+        if (stream == null) {
+            return "";
+        }
+        try (InputStream in = stream; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            return new String(out.toByteArray(), StandardCharsets.UTF_8);
+        }
     }
 
     /**
@@ -185,11 +209,11 @@ public class OpProxyApiClient implements AutoCloseable {
      * Faller tillbaka till råtext om parsning misslyckas.
      */
     private String extractErrorMessage(String body) {
-        if (body == null || body.isBlank()) {
+        if (body == null || body.trim().isEmpty()) {
             return "tom svarskropp";
         }
         try {
-            var node = mapper.readTree(body);
+            com.fasterxml.jackson.databind.JsonNode node = mapper.readTree(body);
             String msg = node.path("message").asText(null);
             return msg != null ? msg : body;
         } catch (Exception ignored) {
@@ -199,6 +223,6 @@ public class OpProxyApiClient implements AutoCloseable {
 
     @Override
     public void close() {
-        http.close(); // HttpClient är AutoCloseable sedan Java 21
+        // Ingen bestående resurs att stänga för HttpURLConnection-varianten.
     }
 }

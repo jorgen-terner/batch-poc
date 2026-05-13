@@ -128,7 +128,7 @@ public class BatchStartCommand implements Callable<Integer> {
             );
 
             String executionName = started.executionName();
-            if (executionName == null || executionName.isBlank()) {
+            if (executionName == null || executionName.trim().isEmpty()) {
                 System.err.println("FEL: startsvaret saknar executionName");
                 return 1;
             }
@@ -177,7 +177,7 @@ public class BatchStartCommand implements Callable<Integer> {
             }
 
             if (watchTimeoutSeconds > 0) {
-                long elapsed = Duration.between(started, Instant.now()).toSeconds();
+                long elapsed = Duration.between(started, Instant.now()).getSeconds();
                 if (elapsed >= watchTimeoutSeconds) {
                     System.err.printf("Timeout efter %ds (senaste fas=%s)%n",
                         watchTimeoutSeconds, status.phase());
@@ -201,7 +201,7 @@ public class BatchStartCommand implements Callable<Integer> {
 
         while (!completed[0]) {
             if (watchTimeoutSeconds > 0) {
-                long elapsed = Duration.between(started, Instant.now()).toSeconds();
+                long elapsed = Duration.between(started, Instant.now()).getSeconds();
                 if (elapsed >= watchTimeoutSeconds) {
                     System.err.printf("Timeout efter %ds i SSE-läge%n", watchTimeoutSeconds);
                     return 124;
@@ -210,32 +210,30 @@ public class BatchStartCommand implements Callable<Integer> {
 
             try {
                 client.stream(executionName, intervalSeconds, kubeNamespace, sinceCursor[0], event -> {
-                    switch (event.type()) {
-                        case "status" -> System.out.printf(
+                    String eventType = event.type();
+                    if ("status".equals(eventType)) {
+                        System.out.printf(
                             "Status: fas=%s (aktiva=%d lyckade=%d misslyckade=%d)%n",
                             event.phase(),
                             orZero(event.activePods()),
                             orZero(event.succeededPods()),
                             orZero(event.failedPods()));
-                        case "log" -> {
-                            if (event.cursor() != null && !event.cursor().isBlank()) {
-                                sinceCursor[0] = event.cursor();
-                            }
-                            System.out.printf("--- Logg: %s ---%n", event.pod());
-                            if (event.output() != null) {
-                                System.out.println(event.output());
-                            }
+                    } else if ("log".equals(eventType)) {
+                        if (event.cursor() != null && !event.cursor().trim().isEmpty()) {
+                            sinceCursor[0] = event.cursor();
                         }
-                        case "done" -> {
-                            if (event.cursor() != null && !event.cursor().isBlank()) {
-                                sinceCursor[0] = event.cursor();
-                            }
-                            System.out.printf("Klar: fas=%s exitCode=%d%n",
-                                event.phase(), orZero(event.exitCode()));
-                            exitCode[0] = orZero(event.exitCode());
-                            completed[0] = true;
+                        System.out.printf("--- Logg: %s ---%n", event.pod());
+                        if (event.output() != null) {
+                            System.out.println(event.output());
                         }
-                        default -> { /* okänd event-typ – ignorera */ }
+                    } else if ("done".equals(eventType)) {
+                        if (event.cursor() != null && !event.cursor().trim().isEmpty()) {
+                            sinceCursor[0] = event.cursor();
+                        }
+                        System.out.printf("Klar: fas=%s exitCode=%d%n",
+                            event.phase(), orZero(event.exitCode()));
+                        exitCode[0] = orZero(event.exitCode());
+                        completed[0] = true;
                     }
                 });
                 if (!completed[0]) {
@@ -316,14 +314,23 @@ public class BatchStartCommand implements Callable<Integer> {
     }
 
     private static int phaseToExitCode(String phase) {
-        if (phase == null) return 4;
-        return switch (phase.toUpperCase(java.util.Locale.ROOT)) {
-            case "SUCCEEDED", "STOPPED", "CANCELLED" -> 0;
-            case "RUNNING", "PENDING" -> 10;
-            case "FAILED" -> 2;
-            case "SUSPENDED" -> 3;
-            default -> 4;
-        };
+        if (phase == null) {
+            return 4;
+        }
+        String normalized = phase.toUpperCase(java.util.Locale.ROOT);
+        if ("SUCCEEDED".equals(normalized) || "STOPPED".equals(normalized) || "CANCELLED".equals(normalized)) {
+            return 0;
+        }
+        if ("RUNNING".equals(normalized) || "PENDING".equals(normalized)) {
+            return 10;
+        }
+        if ("FAILED".equals(normalized)) {
+            return 2;
+        }
+        if ("SUSPENDED".equals(normalized)) {
+            return 3;
+        }
+        return 4;
     }
 
     private static int orZero(Integer v) {
@@ -331,6 +338,6 @@ public class BatchStartCommand implements Callable<Integer> {
     }
 
     private static String blankToNull(String s) {
-        return (s == null || s.isBlank()) ? null : s;
+        return (s == null || s.trim().isEmpty()) ? null : s;
     }
 }
