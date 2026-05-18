@@ -168,7 +168,7 @@ public class TemplateExecutionService {
 
     /**
      * Returnerar en SSE-ström med periodiska statusuppdateringar och inkrementella loggrader.
-     * Om {@code sinceJson} anges används det som start-offset per pod vid reconnect.
+     * Om {@code since} anges används den som tidscursor vid reconnect.
      */
     public Multi<ExecutionStreamEventVO> streamExecution(String namespace, String executionName, int intervalSeconds) {
         return streamExecution(namespace, executionName, intervalSeconds, null);
@@ -177,7 +177,7 @@ public class TemplateExecutionService {
     /**
      * Returnerar en SSE-ström med periodiska statusuppdateringar och inkrementella loggrader.
      *
-     * @param sinceJson JSON med pod-namn -> antal redan konsumerade loggrader.
+     * @param since ISO-8601 tidscursor för inkrementell återanslutning.
      */
     public Multi<ExecutionStreamEventVO> streamExecution(
         String namespace,
@@ -228,7 +228,10 @@ public class TemplateExecutionService {
                 String cursorValue = upperBound.toString();
                 emitter.emit(ExecutionStreamEventVO.status(s, cursorValue));
 
-                Instant readFrom = cursor[0].minusMillis(STREAM_OVERLAP_MILLIS);
+                Instant overlapStart = Instant.EPOCH.plusMillis(STREAM_OVERLAP_MILLIS);
+                Instant readFrom = cursor[0].isAfter(overlapStart)
+                    ? cursor[0].minusMillis(STREAM_OVERLAP_MILLIS)
+                    : Instant.EPOCH;
                 Map<String, String> newLogsByPod;
                 try {
                     newLogsByPod = kubernetesJobGateway.readExecutionLogsSinceTime(
@@ -277,13 +280,13 @@ public class TemplateExecutionService {
 
     private Instant parseSinceInstant(String since) {
         if (since == null || since.isBlank()) {
-            return Instant.now();
+            return Instant.EPOCH;
         }
         try {
             return Instant.parse(since);
         } catch (DateTimeParseException ex) {
-            LOG.warn("Kunde inte parsa since='{}', startar från nu: {}", since, ex.getMessage());
-            return Instant.now();
+            LOG.warn("Kunde inte parsa since='{}', startar från epok: {}", since, ex.getMessage());
+            return Instant.EPOCH;
         }
     }
 
