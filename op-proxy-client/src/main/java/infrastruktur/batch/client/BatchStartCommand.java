@@ -225,6 +225,7 @@ public class BatchStartCommand implements Callable<Integer> {
                         System.out.printf("--- Logg: %s ---%n", event.pod());
                         if (event.output() != null) {
                             System.out.println(event.output());
+                            System.out.flush();
                         }
                     } else if ("done".equals(eventType)) {
                         if (event.cursor() != null && !event.cursor().trim().isEmpty()) {
