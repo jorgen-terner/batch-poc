@@ -36,7 +36,7 @@ public class TemplateExecutionService {
     private static final int DEFAULT_STOP_GRACEFUL_MAX_ATTEMPTS = 20;
     private static final long STREAM_OVERLAP_MILLIS = 1000L;
     private static final int STREAM_DEDUP_TAIL_CHARS = 4096;
-    private static final int STREAM_IRRECOVERABLE_CHECK_EVERY = 6;
+    private static final int STREAM_IRRECOVERABLE_CHECK_EVERY = 1;
 
     private final KubernetesJobGateway kubernetesJobGateway;
     private final JobPhaseResolver jobPhaseResolver;
@@ -252,7 +252,7 @@ public class TemplateExecutionService {
                     }
 
                     String previousTail = emittedTailByPod.getOrDefault(pod, "");
-                    String deduped = removePrefixOverlap(previousTail, output);
+                    String deduped = StreamLogDeduplicator.removePrefixOverlap(previousTail, output);
                     if (deduped.isBlank()) {
                         return;
                     }
@@ -290,26 +290,6 @@ public class TemplateExecutionService {
         }
     }
 
-    private static String removePrefixOverlap(String previousTail, String currentChunk) {
-        if (previousTail == null || previousTail.isEmpty() || currentChunk == null || currentChunk.isEmpty()) {
-            return currentChunk == null ? "" : currentChunk;
-        }
-
-        int max = Math.min(previousTail.length(), currentChunk.length());
-        for (int overlap = max; overlap > 0; overlap--) {
-            String previousSuffix = previousTail.substring(previousTail.length() - overlap);
-            String currentPrefix = currentChunk.substring(0, overlap);
-            if (previousSuffix.equals(currentPrefix)) {
-                // Deduplicera endast när överlappet är hela chunken eller slutar vid radslut.
-                // Detta minskar risken att kapa giltig loggtext vid slumpmässig teckenmatchning.
-                if (overlap == currentChunk.length() || currentPrefix.endsWith("\n") || currentPrefix.endsWith("\r")) {
-                    return currentChunk.substring(overlap);
-                }
-            }
-        }
-        return currentChunk;
-    }
-
     private static String tail(String value, int maxChars) {
         if (value == null || value.length() <= maxChars) {
             return value == null ? "" : value;
@@ -318,19 +298,23 @@ public class TemplateExecutionService {
     }
 
     private static boolean isTerminalPhase(String phase) {
-        return switch (phase.toUpperCase(Locale.ROOT)) {
+        return switch (normalizePhase(phase)) {
             case "SUCCEEDED", "FAILED", "STOPPED", "CANCELLED" -> true;
             default -> false;
         };
     }
 
     private static int phaseToExitCode(String phase) {
-        return switch (phase.toUpperCase(Locale.ROOT)) {
+        return switch (normalizePhase(phase)) {
             case "SUCCEEDED", "STOPPED", "CANCELLED" -> 0;
             case "FAILED" -> 2;
             case "SUSPENDED" -> 3;
             default -> 4;
         };
+    }
+
+    private static String normalizePhase(String phase) {
+        return phase == null ? "" : phase.trim().toUpperCase(Locale.ROOT);
     }
 
     public ExecutionActionResponseVO stop(String namespace, String executionName) {
