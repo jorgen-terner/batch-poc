@@ -19,10 +19,10 @@ class GenericExceptionMapperTest {
         assertEquals(500, response.getStatus());
         @SuppressWarnings("unchecked")
         Map<String, Object> body = (Map<String, Object>) response.getEntity();
-        assertEquals("Internal server error", body.get("error"));
+        assertEquals("Internt serverfel", body.get("error"));
         assertEquals("INTERNAL_ERROR", body.get("code"));
         // Safe generic message – must NOT leak the exception message
-        assertEquals("An unexpected error occurred", body.get("message"));
+        assertEquals("Ett oväntat fel uppstod", body.get("message"));
     }
 
     @Test

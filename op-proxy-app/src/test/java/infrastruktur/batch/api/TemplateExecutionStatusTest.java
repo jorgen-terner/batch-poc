@@ -104,7 +104,7 @@ class TemplateExecutionStatusTest {
             .get("/api/executions/missing-exec")
             .then()
             .statusCode(404)
-            .body("error", equalTo("Resource not found"))
+            .body("error", equalTo("Resursen hittades inte"))
             .body("code", equalTo("NOT_FOUND"))
             .body("message", equalTo("Job not found: default/missing-exec"));
     }

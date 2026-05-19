@@ -81,7 +81,7 @@ class TemplateExecutionLogsTest {
             .get("/api/executions/missing-exec/logs")
             .then()
             .statusCode(404)
-            .body("error", equalTo("Resource not found"))
+            .body("error", equalTo("Resursen hittades inte"))
             .body("code", equalTo("NOT_FOUND"))
             .body("message", equalTo("Job not found: default/missing-exec"));
     }
@@ -97,7 +97,7 @@ class TemplateExecutionLogsTest {
             .get("/api/executions/my-exec-1/logs")
             .then()
             .statusCode(400)
-            .body("error", equalTo("Invalid request"))
+            .body("error", equalTo("Ogiltig begäran"))
             .body("code", equalTo("BAD_REQUEST"))
             .body("message", equalTo("tailLines must be >= 1"));
     }

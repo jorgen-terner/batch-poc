@@ -61,7 +61,7 @@ class TemplateExecutionStopTest {
             .post("/api/executions/my-exec-fail/stop")
             .then()
             .statusCode(502)
-            .body("error", equalTo("Kubernetes API error"))
+            .body("error", equalTo("Kubernetes-API-fel"))
             .body("code", equalTo("KUBERNETES_API_ERROR"));
     }
 }

@@ -99,7 +99,7 @@ class TemplateExecutionStartTest {
             .post("/api/templates/" + TEMPLATE_NAME + "/start")
             .then()
             .statusCode(422)
-            .body("error", equalTo("Template processing failed"))
+            .body("error", equalTo("Behandling av template misslyckades"))
             .body("code", equalTo("TEMPLATE_PROCESSING_ERROR"))
             .body("message", containsString("Template not found"));
     }
@@ -117,7 +117,7 @@ class TemplateExecutionStartTest {
             .post("/api/templates/" + TEMPLATE_NAME + "/start")
             .then()
             .statusCode(409)
-            .body("error", equalTo("Resource already exists"))
+            .body("error", equalTo("Resursen finns redan"))
             .body("code", equalTo("ALREADY_EXISTS"));
     }
 
@@ -134,7 +134,7 @@ class TemplateExecutionStartTest {
             .post("/api/templates/" + TEMPLATE_NAME + "/start")
             .then()
             .statusCode(502)
-            .body("error", equalTo("Kubernetes API error"))
+            .body("error", equalTo("Kubernetes-API-fel"))
             .body("code", equalTo("KUBERNETES_API_ERROR"));
     }
 
@@ -152,7 +152,7 @@ class TemplateExecutionStartTest {
             .post("/api/templates/" + TEMPLATE_NAME + "/start")
             .then()
             .statusCode(400)
-            .body("error", equalTo("Invalid request"))
+            .body("error", equalTo("Ogiltig begäran"))
             .body("code", equalTo("BAD_REQUEST"))
             .body("message", containsString("Duplicate parameter name"));
     }

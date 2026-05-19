@@ -33,7 +33,7 @@ class TemplateExecutionStopAlreadyStoppedTest {
             .post("/api/executions/" + executionName + "/stop")
             .then()
             .statusCode(404)
-            .body("error", equalTo("Resource not found"))
+            .body("error", equalTo("Resursen hittades inte"))
             .body("code", equalTo("NOT_FOUND"));
     }
 }
