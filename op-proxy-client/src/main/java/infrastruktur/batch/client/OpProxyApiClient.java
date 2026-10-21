@@ -65,7 +65,7 @@ public class OpProxyApiClient implements AutoCloseable {
         if (namespace != null && !namespace.trim().isEmpty()) {
             url += "?namespace=" + namespace;
         }
-        return execute(url, "POST", "", null, "application/json", ExecutionActionResponseVO.class);
+        return execute(url, "POST", "", "application/json", "application/json", ExecutionActionResponseVO.class);
     }
 
     public ExecutionLogsResponseVO logs(String executionName, Integer tailLines, String namespace)

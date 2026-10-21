@@ -25,8 +25,8 @@ class JsonErrorHelperTest {
         JsonProcessingException jsonEx = createJsonParseException("{invalid");
         String message = JsonErrorHelper.extractJsonErrorMessage(jsonEx);
         assertNotNull(message);
-        assertTrue(message.startsWith("Request body could not be deserialized"),
-            "Expected message to start with 'Request body could not be deserialized' but was: " + message);
+        assertTrue(message.startsWith("Request body kunde inte deserialiseras"),
+            "Expected message to start with 'Request body kunde inte deserialiseras' but was: " + message);
     }
 
     @Test
@@ -35,8 +35,8 @@ class JsonErrorHelperTest {
         RuntimeException wrapper = new RuntimeException("wrapped", jsonEx);
         String message = JsonErrorHelper.extractJsonErrorMessage(wrapper);
         assertNotNull(message);
-        assertTrue(message.startsWith("Request body could not be deserialized"),
-            "Expected message to start with 'Request body could not be deserialized' but was: " + message);
+        assertTrue(message.startsWith("Request body kunde inte deserialiseras"),
+            "Expected message to start with 'Request body kunde inte deserialiseras' but was: " + message);
     }
 
     @Test
@@ -46,7 +46,7 @@ class JsonErrorHelperTest {
         assertNotNull(message);
         // When Jackson provides location info, the message includes line/column info
         // We just verify the message is a non-empty string about deserialization
-        assertTrue(message.contains("deserialized"),
+        assertTrue(message.contains("deserialiseras"),
             "Message should mention deserialization: " + message);
     }
 

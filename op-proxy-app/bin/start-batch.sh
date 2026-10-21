@@ -18,6 +18,7 @@ Flaggor:
   --watch-timeout-seconds N    Max tid att vaka innan timeout (default: 3600, 0 = ingen timeout)
   --show-logs                  Skriv ut stdout-loggar från körningens poddar när den avslutas
   --logs-tail-lines N          Antal logg-rader att hämta per pod (default: alla rader)
+  --namespace NAMESPACE        Kubernetes-namespace (default: default)
   --insecure                   Tillåt osäkert TLS-certifikat (curl -k)
   --help                       Visa hjälp
 
@@ -114,6 +115,7 @@ TEMPLATE_NAME=""
 CLIENT_REQUEST_ID=""
 execution_name=""
 START_TIMEOUT_SECONDS=""
+NAMESPACE="default"
 INTERVAL_SECONDS=5
 WATCH_TIMEOUT_SECONDS=3600
 INSECURE_TLS=false
@@ -184,6 +186,11 @@ while [ $# -gt 0 ]; do
       LOGS_TAIL_LINES="$2"
       shift 2
       ;;
+    --namespace)
+      [ $# -ge 2 ] || die "--namespace kräver ett värde"
+      NAMESPACE="$2"
+      shift 2
+      ;;
     --insecure)
       INSECURE_TLS=true
       shift
@@ -247,7 +254,7 @@ start_payload="$(jq -cn \
     parameters: (if ($parameters | length) == 0 then null else $parameters end)
   } | with_entries(select(.value != null))')" || die "Kunde inte bygga start-payload med jq"
 
-start_url="$BASE_URL/api/templates/$TEMPLATE_NAME/start"
+start_url="$BASE_URL/api/templates/$TEMPLATE_NAME/start?namespace=$NAMESPACE"
 start_response="$(api_request POST "$start_url" "$start_payload")" || die "Misslyckades att starta körning via $start_url"
 
 execution_name="$(printf '%s' "$start_response" | jq -r '.executionName // empty')" || die "Kunde inte läsa executionName från start-svar"
@@ -256,7 +263,7 @@ execution_name="$(printf '%s' "$start_response" | jq -r '.executionName // empty
 echo "Körning startad: $execution_name"
 
 started_epoch="$(date +%s)"
-status_url="$BASE_URL/api/executions/$execution_name"
+status_url="$BASE_URL/api/executions/$execution_name?namespace=$NAMESPACE"
 
 while true; do
   status_response="$(api_request GET "$status_url")" || die "Misslyckades att hämta status från $status_url"
@@ -268,9 +275,9 @@ while true; do
   case "$exit_code" in
     0|2|3|4)
       if [ "$SHOW_LOGS" = "true" ]; then
-        logs_url="$BASE_URL/api/executions/$execution_name/logs"
+        logs_url="$BASE_URL/api/executions/$execution_name/logs?namespace=$NAMESPACE"
         if [ -n "$LOGS_TAIL_LINES" ]; then
-          logs_url="${logs_url}?tailLines=${LOGS_TAIL_LINES}"
+          logs_url="${logs_url}&tailLines=${LOGS_TAIL_LINES}"
         fi
         echo "--- Loggar för körning $execution_name ---"
         logs_response="$(curl ${INSECURE_TLS:+"-k"} --silent --show-error \
@@ -291,6 +298,11 @@ while true; do
     elapsed="$((now_epoch - started_epoch))"
     if [ "$elapsed" -ge "$WATCH_TIMEOUT_SECONDS" ]; then
       echo "Timeout efter ${WATCH_TIMEOUT_SECONDS}s medan status pollades (senaste fas=$phase)" >&2
+      stop_url="$BASE_URL/api/executions/$execution_name/stop?namespace=$NAMESPACE"
+      curl ${INSECURE_TLS:+"-k"} --silent --output /dev/null \
+        --request POST \
+        --header "Accept: application/json" \
+        "$stop_url" 2>/dev/null
       exit 124
     fi
   fi

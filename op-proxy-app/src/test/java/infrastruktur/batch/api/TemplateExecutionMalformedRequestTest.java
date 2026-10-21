@@ -28,9 +28,9 @@ class TemplateExecutionMalformedRequestTest {
             .then()
             .statusCode(400)
             .contentType(containsString("application/json"))
-            .body("error", equalTo("Invalid request"))
+            .body("error", equalTo("Ogiltig begäran"))
             .body("code", equalTo("BAD_REQUEST"))
-            .body("message", containsString("Request body could not be deserialized"));
+            .body("message", containsString("Request body kunde inte deserialiseras"));
 
         verifyNoInteractions(templateExecutionService);
     }

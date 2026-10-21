@@ -17,6 +17,8 @@ out/
 
 # Gradle
 .gradle/
+.gradle-user/
+.gradle-user-2/
 !gradle/wrapper/gradle-wrapper.jar
 !gradlew
 !gradlew.bat
