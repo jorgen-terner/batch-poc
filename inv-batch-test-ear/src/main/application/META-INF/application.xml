@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<application xmlns="https://jakarta.ee/xml/ns/jakartaee"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/application_10.xsd"
+             version="10">
+  <description>inv_batch_test</description>
+  <display-name>inv_batch_test</display-name>
+  <module>
+    <web>
+      <web-uri>inv-batch-test-app.war</web-uri>
+      <context-root>inv-batch-app</context-root>
+    </web>
+  </module>
+  <library-directory>lib</library-directory>
+</application>

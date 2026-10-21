@@ -11,7 +11,9 @@ pluginManagement {
 
 rootProject.name = 'inf-batch-job'
 
-include 'op-proxy-app'
-include 'inf-javabatch'
-include 'example-springbatch-app'
-include 'op-proxy-client'
+// include 'op-proxy-app'
+// include 'inf-javabatch'
+// include 'example-springbatch-app'
+// include 'op-proxy-client'
+include 'inv-batch-test-app'
+include 'inv-batch-test-ear'

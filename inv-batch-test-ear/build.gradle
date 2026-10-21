@@ -1,0 +1,17 @@
+apply plugin: 'ear'
+
+configurations {
+    instrumentedClasspath {
+        canBeResolved = true
+        canBeConsumed = false
+    }
+}
+dependencies {
+    deploy project(path: ':inv-batch-test-app', configuration: 'archives')
+}
+
+
+ear {
+    archiveFileName = 'inv-batch-test.ear'
+}
+
