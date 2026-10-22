@@ -1,17 +1,13 @@
-apply plugin: 'ear'
+plugins {
+    id 'base'
+}
 
-configurations {
-    instrumentedClasspath {
-        canBeResolved = true
-        canBeConsumed = false
+description = 'Legacy WildFly EAR module (retired after Spring Boot Kubernetes migration)'
+
+tasks.register('legacyWildFlyEar') {
+    group = 'build'
+    description = 'Explains that EAR packaging has been retired.'
+    doLast {
+        logger.lifecycle('inv-batch-test-ear is retired. Build and deploy inv-batch-test-app as Spring Boot container instead.')
     }
 }
-dependencies {
-    deploy project(path: ':inv-batch-test-app', configuration: 'archives')
-}
-
-
-ear {
-    archiveFileName = 'inv-batch-test.ear'
-}
-

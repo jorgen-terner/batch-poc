@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: inv-batch-test-app
+  labels:
+    app: inv-batch-test-app
+spec:
+  selector:
+    app: inv-batch-test-app
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080

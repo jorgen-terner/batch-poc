@@ -16,4 +16,4 @@ rootProject.name = 'inf-batch-job'
 // include 'example-springbatch-app'
 // include 'op-proxy-client'
 include 'inv-batch-test-app'
-include 'inv-batch-test-ear'
+// include 'inv-batch-test-ear' // Legacy WildFly/EAR module, retired after Spring Boot migration

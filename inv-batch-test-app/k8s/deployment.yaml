@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inv-batch-test-app
+  labels:
+    app: inv-batch-test-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: inv-batch-test-app
+  template:
+    metadata:
+      labels:
+        app: inv-batch-test-app
+    spec:
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: inv-batch-test-app
+          image: image-registry.openshift-image-registry.svc:5000/dev252/inv-batch-test-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: inv-batch-test-app-config
+            - secretRef:
+                name: inv-batch-test-app-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "768Mi"
+          livenessProbe:
+            httpGet:
+              path: /inv-batch-app/batch/actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /inv-batch-app/batch/actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
