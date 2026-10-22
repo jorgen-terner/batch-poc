@@ -61,14 +61,22 @@ Den här modulen är migrerad från WildFly/EAR-körning till fristående Spring
 
 - [Dockerfile](./Dockerfile)
   - Kör `inv-batch-test-app.jar` i Java 21 runtime.
+- [start-both.sh](./start-both.sh)
+  - Startar `inv-batch-test-app` lokalt i podden och kör sedan batch wrapper-scriptet.
+  - Stöd för samma kommandomönster som:
+    - `/produkter/fk/tools/fk-inf_batch_api/bin/batch-api-script/batch-api-runner.sh /produkter/fk/tools/fk-inf_poc_javabatch_api/scripts/run-batch.sh`
 - [k8s/configmap.yaml](./k8s/configmap.yaml)
 - [k8s/deployment.yaml](./k8s/deployment.yaml)
+- [k8s/job.yaml](./k8s/job.yaml)
 - [k8s/secret.yaml](./k8s/secret.yaml)
 - [k8s/service.yaml](./k8s/service.yaml)
   - Innehåller resursgränser samt liveness/readiness probes.
   - DB2 XA-konfig läses via env vars:
     - `INV_DBHOST`, `INV_DBPORT`, `INV_DBNAME`
     - `INV_BATCH2_USERNAME`, `INV_BATCH2_PASSWORD`
+  - Job-körning i samma pod:
+    - appen startas via `/usr/local/bin/start-both.sh`
+    - wrappern anropas med `BATCH_RUNNER` + `RUN_BATCH_SCRIPT`
 
 ### 8) EAR-modul avvecklad
 
