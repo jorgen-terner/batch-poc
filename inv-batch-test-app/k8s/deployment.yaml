@@ -19,6 +19,10 @@ spec:
         - name: inv-batch-test-app
           image: image-registry.openshift-image-registry.svc:5000/dev252/inv-batch-test-app:latest
           imagePullPolicy: Always
+          command:
+            - "/bin/sh"
+            - "-c"
+            - "/usr/local/bin/start-both.sh"
           ports:
             - containerPort: 8080
           envFrom:
