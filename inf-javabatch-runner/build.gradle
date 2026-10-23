@@ -1,0 +1,23 @@
+plugins {
+    id 'java'
+}
+
+group = 'infrastruktur.batch'
+version = '0.1.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+jar {
+    archiveFileName = 'inf-javabatch-runner.jar'
+    manifest {
+        attributes('Main-Class': 'infrastruktur.batch.runner.InfJavabatchRunnerMain')
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

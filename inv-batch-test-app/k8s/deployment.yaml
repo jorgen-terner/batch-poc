@@ -20,9 +20,8 @@ spec:
           image: image-registry.openshift-image-registry.svc:5000/dev252/inv-batch-test-app:latest
           imagePullPolicy: Always
           command:
-            - "/bin/sh"
-            - "-c"
-            - "/usr/local/bin/start-both.sh"
+            - "/produkter/fk/tools/fk-inf_batch_api/bin/batch-api-script/batch-api-runner.sh"
+            - "/usr/local/bin/run-inv-batch-test-app.sh"
           ports:
             - containerPort: 8080
           envFrom:
@@ -30,6 +29,9 @@ spec:
                 name: inv-batch-test-app-config
             - secretRef:
                 name: inv-batch-test-app-secret
+          env:
+            - name: BATCH_RUNNER_ENABLED
+              value: "false"
           resources:
             requests:
               cpu: "100m"

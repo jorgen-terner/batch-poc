@@ -13,6 +13,7 @@ rootProject.name = 'inf-batch-job'
 
 // include 'op-proxy-app'
 // include 'inf-javabatch'
+include 'inf-javabatch-runner'
 // include 'example-springbatch-app'
 // include 'op-proxy-client'
 include 'inv-batch-test-app'

@@ -14,6 +14,7 @@ Den här modulen är migrerad från WildFly/EAR-körning till fristående Spring
   - Lagt till DB2 JDBC-driver (`com.ibm.db2:jcc`).
   - Ersatt Springfox med Springdoc OpenAPI.
   - Konfigurerat `bootJar` (`inv-batch-test-app.jar`) som huvudartefakt.
+  - Använder `inf-javabatch-runner` som intern Java-modul (samma JVM-process i job-läge).
 
 ### 2) Applikationsstart
 
@@ -61,13 +62,9 @@ Den här modulen är migrerad från WildFly/EAR-körning till fristående Spring
 
 - [Dockerfile](./Dockerfile)
   - Kör `inv-batch-test-app.jar` i Java 21 runtime.
-- [start-both.sh](./start-both.sh)
-  - Gemensamt wrapper-skript för att starta appen i alla körsätt.
-  - Startar alltid `inv-batch-test-app` via `batch-api-runner.sh` först och kör sedan batch wrapper-scriptet.
-  - Stöd för samma kommandomönster som:
-    - `/produkter/fk/tools/fk-inf_batch_api/bin/batch-api-script/batch-api-runner.sh /produkter/fk/tools/fk-inf_poc_javabatch_api/scripts/run-batch.sh`
 - [run-inv-batch-test-app.sh](./run-inv-batch-test-app.sh)
   - Startscript som wrappern använder för att köra Spring Boot-jaren.
+  - Körs via `batch-api-runner.sh` direkt i Kubernetes-manifests.
 - [k8s/configmap.yaml](./k8s/configmap.yaml)
 - [k8s/deployment.yaml](./k8s/deployment.yaml)
 - [k8s/job.yaml](./k8s/job.yaml)
@@ -77,10 +74,11 @@ Den här modulen är migrerad från WildFly/EAR-körning till fristående Spring
   - DB2 XA-konfig läses via env vars:
     - `INV_DBHOST`, `INV_DBPORT`, `INV_DBNAME`
     - `INV_BATCH2_USERNAME`, `INV_BATCH2_PASSWORD`
-  - Deployment och Job startar båda via samma wrapper-skript.
-  - Job-körning i samma pod:
-    - appen startas via `/usr/local/bin/start-both.sh`
-    - wrappern anropas med `BATCH_RUNNER` + `RUN_BATCH_SCRIPT`
+  - Deployment och Job startar båda direkt via:
+    - `/produkter/fk/tools/fk-inf_batch_api/bin/batch-api-script/batch-api-runner.sh /usr/local/bin/run-inv-batch-test-app.sh`
+  - Skillnaden mellan körsätt styrs av `BATCH_RUNNER_ENABLED`:
+    - Deployment: `false` (app körs som API/service)
+    - Job: `true` (in-process runner startar/pollar jobbet och avslutar processen med motsvarande exit-kod)
 
 ### 8) EAR-modul avvecklad
 

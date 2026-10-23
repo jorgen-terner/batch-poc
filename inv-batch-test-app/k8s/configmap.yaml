@@ -24,6 +24,3 @@ data:
   ACTIVE_STATUS_VALUES: "STARTING,STARTED,STOPPING"
   SUCCESS_STATUS_VALUES: "COMPLETED"
   FAILURE_STATUS_VALUES: "FAILED,ABANDONED,UNKNOWN,STOPPED"
-  BATCH_RUNNER: "/produkter/fk/tools/fk-inf_batch_api/bin/batch-api-script/batch-api-runner.sh"
-  APP_START_SCRIPT: "/usr/local/bin/run-inv-batch-test-app.sh"
-  RUN_BATCH_SCRIPT: "/produkter/fk/tools/fk-inf_poc_javabatch_api/scripts/run-batch.sh"
