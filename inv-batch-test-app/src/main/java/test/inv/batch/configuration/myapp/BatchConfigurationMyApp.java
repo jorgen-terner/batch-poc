@@ -1,7 +1,7 @@
 package test.inv.batch.configuration.myapp;
 
+import infrastruktur.batch.runner.StepProgressListener;
 import test.inv.batch.exception.InvSkipPolicy;
-import test.inv.batch.listener.InvJobExecutionListener;
 import test.inv.batch.step.myapp.FlyttaBestallningReader;
 import test.inv.batch.step.myapp.FlyttaBestallningWriter;
 import test.inv.batch.step.myapp.UtfardaKortProcessor;
@@ -54,7 +54,7 @@ public class BatchConfigurationMyApp implements ApplicationContextAware
    {
       return new JobBuilder("myAppJob", jobRepository)
             .incrementer(new RunIdIncrementer())
-            .listener(skapaMyAppListener())
+            .listener(skapaMyAppStepProgressListener())
             .start(skapaFlyttaBestallningMyAppStep())
             .next(skapaUtfardaMyAppStep())
             .build();
@@ -75,6 +75,7 @@ public class BatchConfigurationMyApp implements ApplicationContextAware
    {
       return new StepBuilder("flyttaBestallningMyAppStep", jobRepository).<BestallningVO, BestallningVO> chunk(1,
                   transactionManager)
+            .listener(skapaMyAppStepProgressListener())
             .reader(new FlyttaBestallningReader()).faultTolerant().skipPolicy(skapaMyAppSkipPolicy())
             .writer(new FlyttaBestallningWriter()).faultTolerant().skipPolicy(skapaMyAppSkipPolicy()).build();
    }
@@ -83,15 +84,16 @@ public class BatchConfigurationMyApp implements ApplicationContextAware
    public Step skapaUtfardaMyAppStep()
    {
       return new StepBuilder("utfardaMyAppStep", jobRepository).<KortVO, MyAppBatchVO> chunk(1, transactionManager)
+            .listener(skapaMyAppStepProgressListener())
             .reader(new UtfardaKortReader()).faultTolerant().skipPolicy(skapaMyAppSkipPolicy())
             .processor(new UtfardaKortProcessor()).faultTolerant().skipPolicy(skapaMyAppSkipPolicy())
             .writer(new UtfardaKortWriter()).faultTolerant().skipPolicy(skapaMyAppSkipPolicy()).build();
    }
 
    @Bean
-   public InvJobExecutionListener skapaMyAppListener()
+   public StepProgressListener skapaMyAppStepProgressListener()
    {
-      return new InvJobExecutionListener();
+      return new StepProgressListener("flyttaBestallningMyAppStep", "utfardaMyAppStep");
    }
 
    @Bean
