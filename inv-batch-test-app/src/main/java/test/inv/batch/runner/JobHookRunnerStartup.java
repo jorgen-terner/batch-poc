@@ -1,6 +1,6 @@
 package test.inv.batch.runner;
 
-import infrastruktur.batch.runner.InfJavabatchRunnerMain;
+import infrastruktur.batch.contract.BatchRunner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -29,8 +29,9 @@ public class JobHookRunnerStartup implements ApplicationRunner
       int exitCode = 1;
       try
       {
-         LOG.info("batch.runner.enabled=true, starting in-process job hook runner");
-         exitCode = InfJavabatchRunnerMain.runToCompletionFromEnvironment();
+         LOG.info("batch.runner.enabled=true, starting runner via contract");
+         BatchRunner runner = BatchRunnerProvider.get();
+         exitCode = runner.runToCompletionFromEnvironment();
       }
       catch (InterruptedException ex)
       {

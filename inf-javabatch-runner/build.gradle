@@ -12,6 +12,7 @@ java {
 }
 
 dependencies {
+    implementation project(':inf-batch-runner-api')
     implementation 'org.springframework.batch:spring-batch-core:5.2.1'
 }
 

@@ -1,6 +1,6 @@
 package test.inv.batch.configuration.myapp;
 
-import infrastruktur.batch.runner.StepProgressListener;
+import infrastruktur.batch.contract.StepProgressListener;
 import test.inv.batch.exception.InvSkipPolicy;
 import test.inv.batch.step.myapp.FlyttaBestallningReader;
 import test.inv.batch.step.myapp.FlyttaBestallningWriter;
