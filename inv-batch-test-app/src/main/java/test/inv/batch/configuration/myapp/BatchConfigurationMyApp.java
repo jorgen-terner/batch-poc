@@ -1,6 +1,7 @@
 package test.inv.batch.configuration.myapp;
 
 import infrastruktur.batch.contract.StepProgressListener;
+import test.inv.batch.runner.StepProgressListenerProvider;
 import test.inv.batch.exception.InvSkipPolicy;
 import test.inv.batch.step.myapp.FlyttaBestallningReader;
 import test.inv.batch.step.myapp.FlyttaBestallningWriter;
@@ -93,7 +94,7 @@ public class BatchConfigurationMyApp implements ApplicationContextAware
    @Bean
    public StepProgressListener skapaMyAppStepProgressListener()
    {
-      return new StepProgressListener("flyttaBestallningMyAppStep", "utfardaMyAppStep");
+      return StepProgressListenerProvider.create("flyttaBestallningMyAppStep", "utfardaMyAppStep");
    }
 
    @Bean
