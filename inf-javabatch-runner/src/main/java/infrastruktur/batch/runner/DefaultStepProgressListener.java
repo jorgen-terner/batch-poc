@@ -2,28 +2,26 @@ package infrastruktur.batch.runner;
 
 import infrastruktur.batch.contract.RunnerLog;
 import infrastruktur.batch.contract.StepProgressListener;
+import org.springframework.batch.core.Job;
 import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.StepExecution;
+import org.springframework.batch.core.configuration.JobRegistry;
+import org.springframework.batch.core.launch.NoSuchJobException;
+import org.springframework.batch.core.step.StepLocator;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class DefaultStepProgressListener implements StepProgressListener {
-    private final List<String> stepNames;
+    private final JobRegistry jobRegistry;
     private final ConcurrentMap<Long, Integer> totalStepsByExecutionId = new ConcurrentHashMap<>();
     private final ConcurrentMap<Long, AtomicInteger> currentStepsByExecutionId = new ConcurrentHashMap<>();
 
-    public DefaultStepProgressListener(String... stepNames) {
-        this(stepNames == null ? Collections.emptyList() : Arrays.asList(stepNames));
-    }
-
-    public DefaultStepProgressListener(List<String> stepNames) {
-        this.stepNames = stepNames == null ? Collections.emptyList() : List.copyOf(stepNames);
+    public DefaultStepProgressListener(JobRegistry jobRegistry) {
+        this.jobRegistry = Objects.requireNonNull(jobRegistry, "jobRegistry must not be null");
     }
 
     @Override
@@ -63,14 +61,19 @@ public class DefaultStepProgressListener implements StepProgressListener {
     }
 
     private int resolveTotalStepCount(JobExecution jobExecution) {
-        if (!stepNames.isEmpty()) {
-            return stepNames.size();
+        String jobName = jobExecution.getJobInstance().getJobName();
+        try {
+            Job job = jobRegistry.getJob(jobName);
+            if (job instanceof StepLocator stepLocator) {
+                return stepLocator.getStepNames().size();
+            }
+
+            RunnerLog.warn("Could not resolve total steps from JobRegistry for job " + jobName +
+                    " because the job does not implement StepLocator");
+        } catch (NoSuchJobException noSuchJobException) {
+            RunnerLog.warn("Could not resolve total steps from JobRegistry for job " + jobName, noSuchJobException);
         }
 
-        if (jobExecution.getStepExecutions() != null) {
-            return jobExecution.getStepExecutions().size();
-        }
-
-        return 0;
+        return jobExecution.getStepExecutions() != null ? jobExecution.getStepExecutions().size() : 0;
     }
 }

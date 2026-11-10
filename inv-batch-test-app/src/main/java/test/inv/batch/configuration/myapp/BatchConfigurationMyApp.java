@@ -1,7 +1,7 @@
 package test.inv.batch.configuration.myapp;
 
 import infrastruktur.batch.contract.StepProgressListener;
-import test.inv.batch.runner.StepProgressListenerProvider;
+import infrastruktur.batch.contract.StepProgressListenerProvider;
 import test.inv.batch.exception.InvSkipPolicy;
 import test.inv.batch.step.myapp.FlyttaBestallningReader;
 import test.inv.batch.step.myapp.FlyttaBestallningWriter;
@@ -14,6 +14,7 @@ import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.launch.support.TaskExecutorJobLauncher;
+import org.springframework.batch.core.configuration.JobRegistry;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.core.step.skip.SkipPolicy;
@@ -48,6 +49,9 @@ public class BatchConfigurationMyApp implements ApplicationContextAware
 
    @Autowired
    private JobRepository jobRepository;
+
+   @Autowired
+   private JobRegistry jobRegistry;
 
    @Bean
    @Qualifier("myAppJob")
@@ -94,7 +98,7 @@ public class BatchConfigurationMyApp implements ApplicationContextAware
    @Bean
    public StepProgressListener skapaMyAppStepProgressListener()
    {
-      return StepProgressListenerProvider.create("flyttaBestallningMyAppStep", "utfardaMyAppStep");
+      return StepProgressListenerProvider.create(jobRegistry);
    }
 
    @Bean

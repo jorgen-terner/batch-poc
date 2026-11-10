@@ -1,16 +1,18 @@
-package test.inv.batch.runner;
-
-import infrastruktur.batch.contract.BatchRunner;
-import java.util.ServiceLoader;
+package infrastruktur.batch.contract;
 
 public final class BatchRunnerProvider {
+    private static final String DEFAULT_RUNNER_CLASS =
+            "infrastruktur.batch.runner.DefaultBatchRunner";
+
     private BatchRunnerProvider() {
     }
 
     public static BatchRunner get() {
-        ServiceLoader<BatchRunner> loader = ServiceLoader.load(BatchRunner.class);
-
-        for (BatchRunner runner : loader) {
+        BatchRunner runner = ServiceProviderSupport.resolveProvider(
+                BatchRunner.class,
+                DEFAULT_RUNNER_CLASS,
+                BatchRunnerProvider.class.getClassLoader());
+        if (runner != null) {
             return runner;
         }
 

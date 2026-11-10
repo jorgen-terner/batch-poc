@@ -1,6 +1,7 @@
 package test.inv.batch.runner;
 
 import infrastruktur.batch.contract.BatchRunner;
+import infrastruktur.batch.contract.BatchRunnerProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;

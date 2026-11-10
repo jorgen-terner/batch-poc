@@ -1,5 +1,7 @@
 package infrastruktur.batch.contract;
 
+import org.springframework.batch.core.configuration.JobRegistry;
+
 public interface StepProgressListenerFactory {
-    StepProgressListener create(String... stepNames);
+    StepProgressListener create(JobRegistry jobRegistry);
 }
