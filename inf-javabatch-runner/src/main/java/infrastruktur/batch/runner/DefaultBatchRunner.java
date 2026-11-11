@@ -1,6 +1,6 @@
 package infrastruktur.batch.runner;
 
-import infrastruktur.batch.contract.BatchRunner;
+import infrastruktur.batch.api.BatchRunner;
 
 public class DefaultBatchRunner implements BatchRunner {
     @Override

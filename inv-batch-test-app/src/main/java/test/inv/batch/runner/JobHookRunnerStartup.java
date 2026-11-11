@@ -1,7 +1,7 @@
 package test.inv.batch.runner;
 
-import infrastruktur.batch.contract.BatchRunner;
-import infrastruktur.batch.contract.BatchRunnerProvider;
+import infrastruktur.batch.api.BatchRunner;
+import infrastruktur.batch.api.BatchRunnerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -30,8 +30,8 @@ public class JobHookRunnerStartup implements ApplicationRunner
       int exitCode = 1;
       try
       {
-         LOG.info("batch.runner.enabled=true, starting runner via contract");
-         BatchRunner runner = BatchRunnerProvider.get();
+         LOG.info("batch.runner.enabled=true, starting embedded runner");
+         BatchRunner runner = BatchRunnerFactory.createDefault();
          exitCode = runner.runToCompletionFromEnvironment();
       }
       catch (InterruptedException ex)

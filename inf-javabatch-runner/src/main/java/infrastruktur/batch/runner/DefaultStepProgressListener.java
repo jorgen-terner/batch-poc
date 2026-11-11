@@ -1,7 +1,6 @@
 package infrastruktur.batch.runner;
 
-import infrastruktur.batch.contract.RunnerLog;
-import infrastruktur.batch.contract.StepProgressListener;
+import infrastruktur.batch.api.StepProgressListener;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.JobExecution;

@@ -1,4 +1,4 @@
-package infrastruktur.batch.contract;
+package infrastruktur.batch.api;
 
 import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.JobExecution;
