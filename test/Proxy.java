@@ -11,6 +11,7 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.math.BigDecimal;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -170,7 +171,11 @@ public class Proxy
 
     private Object toLegacyValue(Object value)
     {
-        if (value instanceof Number || value instanceof Boolean || value instanceof String || value instanceof Character)
+        if (value instanceof Number)
+        {
+            return normalizeLegacyNumber((Number) value);
+        }
+        if (value instanceof Boolean || value instanceof String || value instanceof Character)
         {
             return value;
         }
@@ -183,6 +188,33 @@ public class Proxy
             return value;
         }
         return String.valueOf(value);
+    }
+
+    private Object normalizeLegacyNumber(Number value)
+    {
+        if (value instanceof Double)
+        {
+            try
+            {
+                return Integer.valueOf(BigDecimal.valueOf(value.doubleValue()).intValueExact());
+            }
+            catch (ArithmeticException ex)
+            {
+                return value;
+            }
+        }
+        if (value instanceof Float)
+        {
+            try
+            {
+                return Integer.valueOf(BigDecimal.valueOf(value.doubleValue()).intValueExact());
+            }
+            catch (ArithmeticException ex)
+            {
+                return value;
+            }
+        }
+        return value;
     }
 
     private String felmeddelandeFor(int statusCode, String responseBody)
@@ -287,4 +319,3 @@ public class Proxy
         return null;
     }
 }
-
